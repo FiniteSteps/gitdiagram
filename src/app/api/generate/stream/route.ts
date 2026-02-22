@@ -30,6 +30,20 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 const MAX_MERMAID_FIX_ATTEMPTS = 3;
 
+/** Return a user-friendly error message; never leak internal details. */
+function safeErrorMessage(error: Error): string {
+  const msg = error.message ?? "";
+  if (/auth|api.key|unauthorized/i.test(msg))
+    return "OpenAI API key is invalid or expired.";
+  if (/rate.limit/i.test(msg))
+    return "OpenAI rate limit exceeded. Please try again later.";
+  if (/github/i.test(error.constructor?.name ?? ""))
+    return "GitHub API error. The repository may be private or inaccessible.";
+  // Pass through our own ValueError-style messages
+  if (msg.length > 0 && msg.length < 200) return msg;
+  return "An internal error occurred. Please try again.";
+}
+
 /** Azure models may not support all reasoning-effort levels (e.g. "low").
  *  Clamp unsupported values to "medium" when targeting Azure OpenAI. */
 function resolveReasoningEffort(
@@ -90,6 +104,7 @@ export async function POST(request: Request) {
   const azure = adminConfig.azure;
   const githubPat = adminConfig.githubPat;
 
+  const { signal } = request;
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
@@ -163,6 +178,12 @@ export async function POST(request: Request) {
             send({ status: "explanation_chunk", chunk });
           }
 
+          // Check for client disconnect between stages
+          if (signal.aborted) {
+            controller.close();
+            return;
+          }
+
           send({
             status: "mapping_sent",
             message: `Sending component mapping request to ${model}...`,
@@ -190,6 +211,12 @@ export async function POST(request: Request) {
           }
 
           const componentMapping = extractComponentMapping(fullMappingResponse);
+
+          // Check for client disconnect between stages
+          if (signal.aborted) {
+            controller.close();
+            return;
+          }
 
           send({
             status: "diagram_sent",
@@ -314,7 +341,7 @@ export async function POST(request: Request) {
             status: "error",
             error:
               error instanceof Error
-                ? error.message
+                ? safeErrorMessage(error)
                 : "Streaming generation failed.",
             error_code: "STREAM_FAILED",
           });

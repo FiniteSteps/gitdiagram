@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import os
 from datetime import UTC, datetime, timedelta
 from dataclasses import dataclass
 
+import httpx
 import jwt
-import requests
 
 EXCLUDED_PATTERNS = [
     "node_modules/",
@@ -51,11 +52,16 @@ def _should_include_file(path: str) -> bool:
     return not any(pattern in lower_path for pattern in EXCLUDED_PATTERNS)
 
 
-def _fetch_json(url: str, headers: dict[str, str], not_found_message: str) -> dict:
-    response = requests.get(url, headers=headers, timeout=30)
+async def _fetch_json(
+    client: httpx.AsyncClient,
+    url: str,
+    headers: dict[str, str],
+    not_found_message: str,
+) -> dict:
+    response = await client.get(url, headers=headers, timeout=30)
     if response.status_code == 404:
         raise ValueError(not_found_message)
-    if not response.ok:
+    if response.status_code >= 400:
         raise ValueError(f"GitHub request failed ({response.status_code}): {response.text}")
     return response.json()
 
@@ -93,7 +99,7 @@ class GitHubService:
         }
         return jwt.encode(payload, self._normalize_private_key(), algorithm="RS256")
 
-    def _get_installation_token(self) -> str:
+    async def _get_installation_token(self, client: httpx.AsyncClient) -> str:
         if self.access_token and self.token_expires_at and self.token_expires_at > datetime.now(UTC):
             return self.access_token
 
@@ -101,7 +107,7 @@ class GitHubService:
             raise ValueError("Missing GITHUB_INSTALLATION_ID.")
 
         jwt_token = self._generate_jwt()
-        response = requests.post(
+        response = await client.post(
             f"https://api.github.com/app/installations/{self.installation_id}/access_tokens",
             headers={
                 "Authorization": f"Bearer {jwt_token}",
@@ -110,7 +116,7 @@ class GitHubService:
             },
             timeout=30,
         )
-        if not response.ok:
+        if response.status_code >= 400:
             raise ValueError(
                 f"GitHub app token request failed ({response.status_code}): {response.text}"
             )
@@ -133,7 +139,7 @@ class GitHubService:
         self.token_expires_at = expires_at
         return token
 
-    def _get_headers(self) -> dict[str, str]:
+    async def _get_headers(self, client: httpx.AsyncClient) -> dict[str, str]:
         if self.github_token:
             return {
                 "Authorization": f"token {self.github_token}",
@@ -141,7 +147,7 @@ class GitHubService:
             }
 
         if self._can_use_app_auth():
-            token = self._get_installation_token()
+            token = await self._get_installation_token(client)
             return {
                 "Authorization": f"Bearer {token}",
                 "Accept": "application/vnd.github+json",
@@ -150,18 +156,24 @@ class GitHubService:
 
         return {"Accept": "application/vnd.github+json"}
 
-    def get_default_branch(self, username: str, repo: str) -> str:
-        data = _fetch_json(
+    async def get_default_branch(
+        self, client: httpx.AsyncClient, username: str, repo: str, headers: dict[str, str]
+    ) -> str:
+        data = await _fetch_json(
+            client,
             f"https://api.github.com/repos/{username}/{repo}",
-            self._get_headers(),
+            headers,
             "Repository not found.",
         )
         return data.get("default_branch") or "main"
 
-    def get_github_file_paths_as_list(self, username: str, repo: str, branch: str) -> str:
-        data = _fetch_json(
+    async def get_github_file_paths_as_list(
+        self, client: httpx.AsyncClient, username: str, repo: str, branch: str, headers: dict[str, str]
+    ) -> str:
+        data = await _fetch_json(
+            client,
             f"https://api.github.com/repos/{username}/{repo}/git/trees/{branch}?recursive=1",
-            self._get_headers(),
+            headers,
             "Could not fetch repository file tree.",
         )
         paths = [
@@ -175,25 +187,40 @@ class GitHubService:
             )
         return "\n".join(paths)
 
-    def get_github_readme(self, username: str, repo: str) -> str:
-        data = _fetch_json(
-            f"https://api.github.com/repos/{username}/{repo}/readme",
-            self._get_headers(),
-            "No README found for the specified repository.",
-        )
+    async def get_github_readme(
+        self, client: httpx.AsyncClient, username: str, repo: str, headers: dict[str, str]
+    ) -> str:
+        """Return README content, or empty string if the repo has no README."""
+        try:
+            data = await _fetch_json(
+                client,
+                f"https://api.github.com/repos/{username}/{repo}/readme",
+                headers,
+                "No README found for the specified repository.",
+            )
+        except ValueError:
+            return ""
+
         content = data.get("content")
         if not isinstance(content, str) or not content:
-            raise ValueError("No README found for the specified repository.")
+            return ""
 
         encoding = data.get("encoding")
         if encoding == "base64":
             return base64.b64decode(content).decode("utf-8")
         return content
 
-    def get_github_data(self, username: str, repo: str) -> GithubData:
-        default_branch = self.get_default_branch(username, repo)
-        file_tree = self.get_github_file_paths_as_list(username, repo, default_branch)
-        readme = self.get_github_readme(username, repo)
+    async def get_github_data(self, username: str, repo: str) -> GithubData:
+        async with httpx.AsyncClient() as client:
+            headers = await self._get_headers(client)
+            default_branch = await self.get_default_branch(client, username, repo, headers)
+
+            # Parallelize file tree and README fetches
+            file_tree, readme = await asyncio.gather(
+                self.get_github_file_paths_as_list(client, username, repo, default_branch, headers),
+                self.get_github_readme(client, username, repo, headers),
+            )
+
         return GithubData(
             default_branch=default_branch,
             file_tree=file_tree,

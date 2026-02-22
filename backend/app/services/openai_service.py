@@ -26,6 +26,7 @@ class AzureConfig:
 class OpenAIService:
     def __init__(self):
         self.default_api_key = os.getenv("OPENAI_API_KEY")
+        self._clients: dict[tuple[str, str | None], AsyncOpenAI | AsyncAzureOpenAI] = {}
 
     def _resolve_api_key(self, override_api_key: str | None = None) -> str:
         api_key = (override_api_key or self.default_api_key or "").strip()
@@ -66,6 +67,23 @@ class OpenAIService:
             timeout=600,
         )
 
+    def _get_or_create_client(
+        self,
+        api_key: str,
+        azure: AzureConfig | None = None,
+    ) -> AsyncOpenAI | AsyncAzureOpenAI:
+        """Cache clients by (api_key, azure_endpoint) to reuse HTTP connection pools."""
+        key = (api_key, azure.endpoint if azure else None)
+        if key not in self._clients:
+            self._clients[key] = self._create_client(api_key, azure)
+        return self._clients[key]
+
+    async def close_all_clients(self) -> None:
+        """Shut down all cached OpenAI clients (call at app shutdown)."""
+        for client in self._clients.values():
+            await client.close()
+        self._clients.clear()
+
     @staticmethod
     def _resolve_model(model: str, azure: AzureConfig | None = None) -> str:
         """For Azure the 'model' parameter must be the deployment name."""
@@ -97,7 +115,7 @@ class OpenAIService:
         if max_output_tokens:
             payload["max_output_tokens"] = max_output_tokens
 
-        client = self._create_client(resolved_api_key, azure)
+        client = self._get_or_create_client(resolved_api_key, azure)
         stream = await client.responses.create(**payload)
         try:
             async for event in stream:
@@ -112,7 +130,6 @@ class OpenAIService:
                     raise ValueError(str(message))
         finally:
             await stream.close()
-            await client.close()
 
     async def count_input_tokens(
         self,
@@ -134,12 +151,12 @@ class OpenAIService:
         if reasoning_effort:
             payload["reasoning"] = {"effort": reasoning_effort}
 
-        client = self._create_client(resolved_api_key, azure)
+        client = self._get_or_create_client(resolved_api_key, azure)
         try:
             response = await client.responses.input_tokens.count(**payload)
             input_tokens = getattr(response, "input_tokens", None)
             if not isinstance(input_tokens, int):
                 raise ValueError("OpenAI input token count returned invalid payload.")
             return input_tokens
-        finally:
-            await client.close()
+        except Exception:
+            raise

@@ -17,7 +17,10 @@ export function processClickEvents(
 
   return diagram.replace(clickPattern, (_, nodeId: string, path: string) => {
     const trimmedPath = path.trim().replace(/^['"]|['"]$/g, "");
-    const isFile = trimmedPath.includes(".") && !trimmedPath.endsWith("/");
+    // Check only the final path component for a dot — ignore leading dots
+    // so that dotfiles (.github, .env) and dotdirs are classified correctly.
+    const filename = trimmedPath.split("/").pop() ?? "";
+    const isFile = filename.length > 1 && filename.slice(1).includes(".");
     const pathType = isFile ? "blob" : "tree";
     const fullUrl = `https://github.com/${username}/${repo}/${pathType}/${branch}/${trimmedPath}`;
 
@@ -35,7 +38,7 @@ export function extractComponentMapping(response: string): string {
     return response;
   }
 
-  return response.slice(startIndex, endIndex);
+  return response.slice(startIndex + startTag.length, endIndex);
 }
 
 export function stripMermaidCodeFences(text: string): string {

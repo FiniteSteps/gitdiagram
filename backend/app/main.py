@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 
 from api_analytics.fastapi import Analytics
 from fastapi import FastAPI
@@ -8,7 +9,14 @@ from app.core.errors import api_success
 from app.core.observability import log_event
 from app.routers import generate
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await generate.openai_service.close_all_clients()
+
+
+app = FastAPI(lifespan=lifespan)
 
 cors_origins = os.getenv("CORS_ORIGINS")
 if cors_origins:

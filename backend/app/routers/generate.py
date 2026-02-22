@@ -26,6 +26,27 @@ router = APIRouter(prefix="/generate", tags=["OpenAI"])
 
 openai_service = OpenAIService()
 
+# Singleton GitHubService for non-PAT case (preserves installation token cache)
+_default_github_service = GitHubService()
+
+
+def safe_error_message(exc: Exception) -> str:
+    """Return a user-friendly error message; never leak internal details."""
+    import openai as _openai
+
+    if isinstance(exc, _openai.AuthenticationError):
+        return "OpenAI API key is invalid or expired."
+    if isinstance(exc, _openai.RateLimitError):
+        return "OpenAI rate limit exceeded. Please try again later."
+    if isinstance(exc, _openai.APIError):
+        return "OpenAI API error. Please try again later."
+
+    msg = str(exc)
+    # Pass through known safe ValueError messages from our own code
+    if isinstance(exc, ValueError):
+        return msg
+    return "An internal error occurred. Please try again."
+
 MAX_MERMAID_FIX_ATTEMPTS = 3
 MULTI_STAGE_INPUT_MULTIPLIER = 2
 INPUT_OVERHEAD_TOKENS = 3000
@@ -111,7 +132,10 @@ def process_click_events(diagram: str, username: str, repo: str, branch: str) ->
     def replace_path(match: re.Match[str]) -> str:
         node_id = match.group(1)
         trimmed_path = match.group(2).strip().strip("\"'")
-        is_file = "." in trimmed_path and not trimmed_path.endswith("/")
+        # Check only the final path component for a dot — ignore leading dots
+        # so that dotfiles (.github, .env) and dotdirs are classified correctly.
+        filename = trimmed_path.rsplit("/", 1)[-1]
+        is_file = "." in filename[1:] if filename else False
         path_type = "blob" if is_file else "tree"
         full_url = f"https://github.com/{username}/{repo}/{path_type}/{branch}/{trimmed_path}"
         return f'click {node_id} "{full_url}"'
@@ -127,9 +151,9 @@ def _parse_request_payload(payload: Any) -> tuple[GenerateRequest | None, str | 
         return None, "Invalid request payload."
 
 
-def _get_github_data(username: str, repo: str, github_pat: str | None):
-    github_service = GitHubService(pat=github_pat)
-    return github_service.get_github_data(username, repo)
+async def _get_github_data(username: str, repo: str, github_pat: str | None):
+    service = GitHubService(pat=github_pat) if github_pat else _default_github_service
+    return await service.get_github_data(username, repo)
 
 
 async def _estimate_repo_input_tokens(
@@ -171,7 +195,7 @@ async def get_generation_cost(request: Request):
                 status_code=400,
             )
 
-        github_data = _get_github_data(parsed.username, parsed.repo, parsed.github_pat)
+        github_data = await _get_github_data(parsed.username, parsed.repo, parsed.github_pat)
         api_key, azure, model_override = _resolve_from_model_config(parsed)
         model = model_override or get_model()
         base_input_tokens = await _estimate_repo_input_tokens(
@@ -220,7 +244,7 @@ async def get_generation_cost(request: Request):
         return JSONResponse(
             {
                 "ok": False,
-                "error": str(exc) if isinstance(exc, Exception) else "Failed to estimate generation cost.",
+                "error": safe_error_message(exc),
                 "error_code": "COST_ESTIMATION_FAILED",
             },
             status_code=500,
@@ -259,7 +283,7 @@ async def generate_stream(request: Request):
             return _sse_message(payload)
 
         try:
-            github_data = _get_github_data(parsed.username, parsed.repo, parsed.github_pat)
+            github_data = await _get_github_data(parsed.username, parsed.repo, parsed.github_pat)
             api_key, azure, model_override = _resolve_from_model_config(parsed)
             model = model_override or get_model()
             token_count = await _estimate_repo_input_tokens(
@@ -326,6 +350,10 @@ async def generate_stream(request: Request):
                 explanation += chunk
                 yield send({"status": "explanation_chunk", "chunk": chunk})
 
+            # Check for client disconnect between stages
+            if await request.is_disconnected():
+                return
+
             yield send(
                 {
                     "status": "mapping_sent",
@@ -356,6 +384,10 @@ async def generate_stream(request: Request):
                 yield send({"status": "mapping_chunk", "chunk": chunk})
 
             component_mapping = _extract_component_mapping(full_mapping_response)
+
+            # Check for client disconnect between stages
+            if await request.is_disconnected():
+                return
 
             yield send(
                 {
@@ -500,7 +532,7 @@ async def generate_stream(request: Request):
             yield send(
                 {
                     "status": "error",
-                    "error": str(exc) if isinstance(exc, Exception) else "Streaming generation failed.",
+                    "error": safe_error_message(exc),
                     "error_code": "STREAM_FAILED",
                 }
             )

@@ -17,14 +17,17 @@ def test_healthz_ok():
 
 
 def test_generate_cost_success(monkeypatch):
-    monkeypatch.setattr(
-        generate,
-        "_get_github_data",
-        lambda username, repo, github_pat=None: SimpleNamespace(
+    async def fake_get_github_data(username, repo, github_pat=None):
+        return SimpleNamespace(
             default_branch="main",
             file_tree="src/main.py",
             readme="# readme",
-        ),
+        )
+
+    monkeypatch.setattr(
+        generate,
+        "_get_github_data",
+        fake_get_github_data,
     )
     monkeypatch.setattr(generate, "get_model", lambda: "gpt-5.2")
 
@@ -49,7 +52,7 @@ def test_generate_cost_success(monkeypatch):
 
 
 def test_generate_cost_error(monkeypatch):
-    def fail_github_data(username, repo, github_pat=None):
+    async def fail_github_data(username, repo, github_pat=None):
         raise ValueError("repo not found")
 
     monkeypatch.setattr(generate, "_get_github_data", fail_github_data)
@@ -66,14 +69,17 @@ def test_generate_cost_error(monkeypatch):
 
 
 def test_generate_stream_event_order_with_fix_loop(monkeypatch):
-    monkeypatch.setattr(
-        generate,
-        "_get_github_data",
-        lambda username, repo, github_pat=None: SimpleNamespace(
+    async def fake_get_github_data(username, repo, github_pat=None):
+        return SimpleNamespace(
             default_branch="main",
             file_tree="src/main.py",
             readme="# readme",
-        ),
+        )
+
+    monkeypatch.setattr(
+        generate,
+        "_get_github_data",
+        fake_get_github_data,
     )
     monkeypatch.setattr(generate, "get_model", lambda: "gpt-5.2")
 

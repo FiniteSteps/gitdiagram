@@ -1,26 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import Link from "next/link";
-import { FaGithub } from "react-icons/fa";
-import { getStarCount } from "~/app/_actions/github";
 import { ThemeToggle } from "./theme-toggle";
 
 export function Header() {
-  const [starCount, setStarCount] = useState<number | null>(null);
-
-  useEffect(() => {
-    void getStarCount().then(setStarCount);
-  }, []);
-
-  const formatStarCount = (count: number | null) => {
-    if (!count) return "10.0k";
-    if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}k`;
-    }
-    return count.toString();
-  };
-
   return (
     <header className="border-b-[3px] border-black dark:border-black">
       <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-4 sm:px-8">
@@ -34,19 +18,8 @@ export function Header() {
             </span>
           </span>
         </Link>
-        <nav className="flex items-center gap-3 sm:gap-6">
+        <nav className="flex items-center">
           <ThemeToggle />
-          <Link
-            href="https://github.com/ahmedkhaleel2004/gitdiagram"
-            className="flex items-center gap-1 text-sm font-medium text-black transition-transform hover:translate-y-[-2px] hover:text-purple-600 dark:text-neutral-200 dark:hover:text-[hsl(var(--neo-link-hover))] sm:gap-2"
-          >
-            <FaGithub className="h-5 w-5" />
-            <span className="hidden sm:inline">GitHub</span>
-          </Link>
-          <span className="flex items-center gap-1 text-sm font-medium text-black dark:text-neutral-200">
-            <span className="text-amber-400 dark:text-[hsl(var(--neo-link))]">★</span>
-            {formatStarCount(starCount)}
-          </span>
         </nav>
       </div>
     </header>

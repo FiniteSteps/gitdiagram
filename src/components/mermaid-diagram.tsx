@@ -95,11 +95,11 @@ const MermaidChart = ({ chart, zoomingEnabled = true }: MermaidChartProps) => {
       mermaidElement.innerHTML = chart;
     }
 
-    mermaid.contentLoaded();
-    // Wait for the SVG to be rendered
-    setTimeout(() => {
-      void initializePanZoom();
-    }, 100);
+    const renderMermaid = async () => {
+      await mermaid.run({ querySelector: ".mermaid" });
+      await initializePanZoom();
+    };
+    void renderMermaid();
 
     return () => {
       // Cleanup not needed with dynamic import approach

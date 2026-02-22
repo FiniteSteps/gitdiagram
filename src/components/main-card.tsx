@@ -7,7 +7,7 @@ import { Input } from "~/components/ui/input";
 import { Button } from "~/components/ui/button";
 import { Sparkles } from "lucide-react";
 import React from "react";
-import { exampleRepos, isExampleRepo } from "~/lib/exampleRepos";
+import { isExampleRepo } from "~/lib/exampleRepos";
 import { ExportDropdown } from "./export-dropdown";
 import { ChevronUp, ChevronDown } from "lucide-react";
 import { Switch } from "~/components/ui/switch";
@@ -65,11 +65,6 @@ export default function MainCard({
     const sanitizedUsername = encodeURIComponent(username);
     const sanitizedRepo = encodeURIComponent(repo);
     router.push(`/${sanitizedUsername}/${sanitizedRepo}`);
-  };
-
-  const handleExampleClick = (repoPath: string, e: React.MouseEvent) => {
-    e.preventDefault();
-    router.push(repoPath);
   };
 
   const handleDropdownToggle = (dropdown: "export") => {
@@ -190,26 +185,6 @@ export default function MainCard({
           </div>
         )}
 
-        {/* Example Repositories */}
-        {isHome && (
-          <div className="space-y-2">
-            <div className="text-sm text-gray-700 dark:text-neutral-300 sm:text-base">
-              Try these example repositories:
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(exampleRepos).map(([name, path]) => (
-                <Button
-                  key={name}
-                  variant="outline"
-                  className="border-2 border-black bg-purple-400 text-sm text-black transition-transform hover:-translate-y-0.5 hover:transform hover:bg-purple-300 dark:border-black dark:bg-[hsl(var(--neo-panel-muted))] dark:text-[hsl(var(--foreground))] dark:hover:bg-[hsl(var(--neo-button))] dark:hover:text-[#0d0a19] sm:text-base"
-                  onClick={(e) => handleExampleClick(path, e)}
-                >
-                  {name}
-                </Button>
-              ))}
-            </div>
-          </div>
-        )}
       </form>
 
       {/* Decorative Sparkle */}

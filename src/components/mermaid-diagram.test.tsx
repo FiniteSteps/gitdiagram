@@ -8,6 +8,7 @@ vi.mock("mermaid", () => ({
   default: {
     initialize: vi.fn(),
     contentLoaded: vi.fn(),
+    run: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
