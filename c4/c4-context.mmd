@@ -1,0 +1,20 @@
+C4Context
+    title System Context Diagram – GitDiagram
+
+    Person(user, "End User", "A developer who wants to visualize a GitHub repository as an interactive Mermaid diagram.")
+    Person(admin, "Admin User", "Operator who manages prompts, settings, and monitors the system via the admin panel.")
+
+    System(gitdiagram, "GitDiagram", "Full-stack web application that converts GitHub repositories into interactive architecture diagrams using a 3-stage LLM pipeline.")
+
+    System_Ext(github_api, "GitHub API", "Provides repository metadata, file trees, and README content.")
+    System_Ext(openai_api, "OpenAI API / Azure OpenAI", "LLM service used for the 3-stage diagram generation pipeline (explanation, component mapping, Mermaid code).")
+    System_Ext(posthog, "PostHog", "Product analytics platform for usage tracking.")
+
+    Rel(user, gitdiagram, "Submits GitHub repo URL, views generated diagram", "HTTPS")
+    Rel(admin, gitdiagram, "Manages settings, prompts, and cache via admin UI", "HTTPS")
+    Rel(gitdiagram, github_api, "Fetches repo metadata, file tree, README", "HTTPS REST")
+    Rel(gitdiagram, openai_api, "Streams LLM completions for 3-stage pipeline", "HTTPS REST")
+    Rel(gitdiagram, posthog, "Sends analytics events", "HTTPS")
+
+    UpdateRelStyle(user, gitdiagram, $offsetY="-30")
+    UpdateRelStyle(admin, gitdiagram, $offsetY="-30")

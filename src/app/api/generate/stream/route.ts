@@ -24,11 +24,19 @@ import {
 } from "~/server/generate/prompts";
 import { generateRequestSchema, sseMessage } from "~/server/generate/types";
 import { getResolvedAdminConfig } from "~/server/generate/admin-config";
+import { getActivePromptStages, type ActivePromptStage } from "~/app/_actions/prompts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 const MAX_MERMAID_FIX_ATTEMPTS = 3;
+
+// ── Hardcoded fallback stages (used when no active prompt set exists) ──
+const FALLBACK_STAGES: ActivePromptStage[] = [
+  { stageOrder: 1, stageName: "Explanation", stageTag: "explanation", systemPrompt: SYSTEM_FIRST_PROMPT },
+  { stageOrder: 2, stageName: "Component Mapping", stageTag: "mapping", systemPrompt: SYSTEM_SECOND_PROMPT },
+  { stageOrder: 3, stageName: "Diagram Generation", stageTag: "diagram", systemPrompt: SYSTEM_THIRD_PROMPT },
+];
 
 /** Return a user-friendly error message; never leak internal details. */
 function safeErrorMessage(error: Error): string {
@@ -64,11 +72,12 @@ async function estimateRepoTokenCount(
   readme: string,
   apiKey?: string,
   azure?: AzureOpenAIOptions,
+  firstStageSystemPrompt?: string,
 ) {
   try {
     return await countInputTokens({
       model,
-      systemPrompt: SYSTEM_FIRST_PROMPT,
+      systemPrompt: firstStageSystemPrompt ?? SYSTEM_FIRST_PROMPT,
       userPrompt: toTaggedMessage({
         file_tree: fileTree,
         readme,
@@ -117,17 +126,41 @@ export async function POST(request: Request) {
         try {
           const githubData = await getGithubData(username, repo, githubPat, branch);
           const model = adminConfig.model || getModel();
+
+          // ── Fetch active prompt set (always fresh from DB) ──
+          const activeStages = await getActivePromptStages();
+
+          // Separate regular stages from the fix stage
+          let regularStages = activeStages.filter((s) => s.stageTag !== "fix");
+          const fixStage = activeStages.find((s) => s.stageTag === "fix");
+
+          // Fallback to hardcoded defaults if no regular stages configured
+          if (regularStages.length === 0) {
+            regularStages = FALLBACK_STAGES;
+          }
+
+          const firstStagePrompt = regularStages[0]!.systemPrompt;
+          const fixPrompt = fixStage?.systemPrompt ?? SYSTEM_FIX_MERMAID_PROMPT;
+
           const tokenCount = await estimateRepoTokenCount(
             model,
             githubData.fileTree,
             githubData.readme,
             apiKey,
             azure,
+            firstStagePrompt,
           );
 
           send({
             status: "started",
             message: "Starting generation process...",
+          });
+
+          // Tell the frontend how many stages to expect
+          send({
+            status: "stage_info",
+            stages: regularStages.map((s) => ({ tag: s.stageTag, name: s.stageName })),
+            total_stages: regularStages.length,
           });
 
           if (tokenCount > 50000 && tokenCount < 195000 && !apiKey) {
@@ -152,99 +185,74 @@ export async function POST(request: Request) {
             return;
           }
 
-          send({
-            status: "explanation_sent",
-            message: `Sending explanation request to ${model}...`,
-          });
-          await sleep(80);
-          send({
-            status: "explanation",
-            message: "Analyzing repository structure...",
-          });
+          // ── Dynamic stage pipeline ──────────────────────────────
+          // Context accumulates all outputs; starts with repo data.
+          const context: Record<string, string> = {
+            file_tree: githubData.fileTree,
+            readme: githubData.readme,
+          };
 
-          let explanation = "";
-          for await (const chunk of streamCompletion({
-            model,
-            systemPrompt: SYSTEM_FIRST_PROMPT,
-            userPrompt: toTaggedMessage({
-              file_tree: githubData.fileTree,
-              readme: githubData.readme,
-            }),
-            apiKey,
-            reasoningEffort: "medium",
-            azure,
-          })) {
-            explanation += chunk;
-            send({ status: "explanation_chunk", chunk });
+          for (let i = 0; i < regularStages.length; i++) {
+            const stage = regularStages[i]!;
+            const tag = stage.stageTag;
+            const isFirst = i === 0;
+
+            send({
+              status: `${tag}_sent`,
+              message: `Sending ${stage.stageName.toLowerCase()} request to ${model}...`,
+              stage_index: i,
+            });
+            await sleep(80);
+            send({
+              status: tag,
+              message: `Processing ${stage.stageName.toLowerCase()}...`,
+              stage_index: i,
+            });
+
+            let output = "";
+            for await (const chunk of streamCompletion({
+              model,
+              systemPrompt: stage.systemPrompt,
+              userPrompt: toTaggedMessage(context),
+              apiKey,
+              reasoningEffort: isFirst
+                ? "medium"
+                : resolveReasoningEffort("low", azure),
+              azure,
+            })) {
+              output += chunk;
+              send({ status: `${tag}_chunk`, chunk, stage_index: i });
+            }
+
+            // Store output in context for subsequent stages
+            context[tag] = output;
+
+            // Special post-processing for well-known tags
+            if (tag === "mapping") {
+              context.component_mapping = extractComponentMapping(output);
+            }
+
+            // Check for client disconnect between stages
+            if (signal.aborted) {
+              controller.close();
+              return;
+            }
           }
 
-          // Check for client disconnect between stages
-          if (signal.aborted) {
-            controller.close();
+          // ── Mermaid validation & fix loop ───────────────────────
+          const rawDiagram = context.diagram;
+          if (!rawDiagram) {
+            send({
+              status: "error",
+              error:
+                "No stage with the 'diagram' tag was found in the active prompt set. " +
+                "Ensure at least one stage uses the 'diagram' tag to produce Mermaid output.",
+              error_code: "NO_DIAGRAM_STAGE",
+            });
             return;
           }
 
-          send({
-            status: "mapping_sent",
-            message: `Sending component mapping request to ${model}...`,
-          });
-          await sleep(80);
-          send({
-            status: "mapping",
-            message: "Creating component mapping...",
-          });
-
-          let fullMappingResponse = "";
-          for await (const chunk of streamCompletion({
-            model,
-            systemPrompt: SYSTEM_SECOND_PROMPT,
-            userPrompt: toTaggedMessage({
-              explanation,
-              file_tree: githubData.fileTree,
-            }),
-            apiKey,
-            reasoningEffort: resolveReasoningEffort("low", azure),
-            azure,
-          })) {
-            fullMappingResponse += chunk;
-            send({ status: "mapping_chunk", chunk });
-          }
-
-          const componentMapping = extractComponentMapping(fullMappingResponse);
-
-          // Check for client disconnect between stages
-          if (signal.aborted) {
-            controller.close();
-            return;
-          }
-
-          send({
-            status: "diagram_sent",
-            message: `Sending diagram generation request to ${model}...`,
-          });
-          await sleep(80);
-          send({
-            status: "diagram",
-            message: "Generating diagram...",
-          });
-
-          let mermaidCode = "";
-          for await (const chunk of streamCompletion({
-            model,
-            systemPrompt: SYSTEM_THIRD_PROMPT,
-            userPrompt: toTaggedMessage({
-              explanation,
-              component_mapping: componentMapping,
-            }),
-            apiKey,
-            reasoningEffort: resolveReasoningEffort("low", azure),
-            azure,
-          })) {
-            mermaidCode += chunk;
-            send({ status: "diagram_chunk", chunk });
-          }
-
-          let candidateDiagram = stripMermaidCodeFences(mermaidCode);
+          let candidateDiagram = stripMermaidCodeFences(rawDiagram);
           let validationResult = await validateMermaidSyntax(candidateDiagram);
           const hadFixLoop = !validationResult.valid;
 
@@ -275,12 +283,12 @@ export async function POST(request: Request) {
             let repairedDiagram = "";
             for await (const chunk of streamCompletion({
               model,
-              systemPrompt: SYSTEM_FIX_MERMAID_PROMPT,
+              systemPrompt: fixPrompt,
               userPrompt: toTaggedMessage({
                 mermaid_code: candidateDiagram,
                 parser_error: parserFeedback,
-                explanation,
-                component_mapping: componentMapping,
+                explanation: context.explanation,
+                component_mapping: context.component_mapping,
               }),
               apiKey,
               reasoningEffort: resolveReasoningEffort("low", azure),
@@ -333,8 +341,8 @@ export async function POST(request: Request) {
           send({
             status: "complete",
             diagram: processedDiagram,
-            explanation,
-            mapping: componentMapping,
+            explanation: context.explanation ?? "",
+            mapping: context.component_mapping ?? context.mapping ?? "",
           });
         } catch (error) {
           send({

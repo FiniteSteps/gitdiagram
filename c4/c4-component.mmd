@@ -1,0 +1,81 @@
+C4Component
+    title Component Diagram – GitDiagram
+
+    %% ────────────────────────────────────────────────────────────────
+    %% Container: Next.js Frontend (src/)
+    %% ────────────────────────────────────────────────────────────────
+    Container_Boundary(frontend, "Next.js Frontend") {
+
+        Component(home_page, "Home Page", "React Server Component", "Landing page with Hero, MainCard for repo URL input. src/app/page.tsx")
+        Component(repo_page, "Repo Diagram Page", "React Server Component", "Dynamic route [username]/[repo] that loads a cached or generates a new diagram. src/app/[username]/[repo]/")
+        Component(admin_panel, "Admin Panel", "React Components", "Settings, prompt management, cache management, audit log. src/app/admin/")
+        Component(mermaid_renderer, "Mermaid Renderer", "React Client Component", "Renders Mermaid diagrams in the browser with svg-pan-zoom. src/components/mermaid-diagram.tsx")
+        Component(use_diagram_hook, "useDiagram Hook", "React Hook", "Orchestrates diagram loading: checks cache, fetches cost, triggers stream generation, manages version state. src/hooks/useDiagram.ts")
+        Component(use_diagram_stream, "useDiagramStream Hook", "React Hook", "Manages SSE stream connection and state machine (idle → started → explanation → mapping → diagram → fix → complete). src/hooks/diagram/useDiagramStream.ts")
+        Component(diagram_api_client, "Diagram API Client", "TypeScript module", "Routes requests to FastAPI or legacy backend based on NEXT_PUBLIC_USE_LEGACY_BACKEND. Handles SSE parsing. src/features/diagram/api.ts")
+        Component(sse_parser, "SSE Stream Parser", "TypeScript module", "Parses Server-Sent Events buffer into typed messages. src/features/diagram/sse.ts")
+        Component(cache_actions, "Cache Server Actions", "Next.js Server Actions", "CRUD for diagram cache and version history via Drizzle ORM. src/app/_actions/cache.ts")
+        Component(admin_actions, "Admin Server Actions", "Next.js Server Actions", "Manage admin settings, prompt sets. src/app/_actions/admin.ts, prompts.ts")
+        Component(github_url_parser, "GitHub URL Parser", "TypeScript module", "Parses and validates GitHub URLs to extract username/repo/branch. src/features/diagram/github-url.ts")
+        Component(middleware, "Auth Middleware", "Next.js Middleware", "Protects /admin routes via ADMIN_SECRET (header, cookie, or query param). src/middleware.ts")
+        Component(providers, "Client Providers", "React Context", "ThemeProvider (next-themes) and PostHogProvider for analytics. src/app/providers.tsx")
+        Component(db_client, "Database Client", "Drizzle ORM", "Connects to Neon (prod) or local Postgres (dev). src/server/db/index.ts")
+
+        Rel(home_page, mermaid_renderer, "Displays example diagrams")
+        Rel(repo_page, use_diagram_hook, "Uses to load/generate diagram")
+        Rel(use_diagram_hook, use_diagram_stream, "Delegates streaming to")
+        Rel(use_diagram_hook, cache_actions, "Reads/writes cache and versions")
+        Rel(use_diagram_hook, diagram_api_client, "Gets cost estimate")
+        Rel(use_diagram_stream, diagram_api_client, "Streams generation via")
+        Rel(diagram_api_client, sse_parser, "Parses SSE with")
+        Rel(repo_page, mermaid_renderer, "Renders final diagram with")
+        Rel(cache_actions, db_client, "Queries DB via")
+        Rel(admin_actions, db_client, "Queries DB via")
+        Rel(admin_panel, admin_actions, "Invokes server actions")
+    }
+
+    %% ────────────────────────────────────────────────────────────────
+    %% Container: FastAPI Backend (backend/app/)
+    %% ────────────────────────────────────────────────────────────────
+    Container_Boundary(backend, "FastAPI Backend") {
+
+        Component(generate_router, "Generate Router", "FastAPI APIRouter", "Exposes POST /generate/stream (SSE) and POST /generate/cost. Orchestrates the 3-stage pipeline + fix loop. backend/app/routers/generate.py")
+        Component(github_service, "GitHub Service", "Python class", "Fetches repo metadata, file tree, README from GitHub API. Supports PAT, GitHub App auth (JWT+installation token). backend/app/services/github_service.py")
+        Component(openai_service, "OpenAI Service", "Python class", "Manages async OpenAI/Azure OpenAI clients. Provides stream_completion and count_input_tokens. Caches clients by (api_key, endpoint). backend/app/services/openai_service.py")
+        Component(mermaid_service, "Mermaid Service", "Python module", "Validates Mermaid syntax by invoking Node.js subprocess (validate_mermaid.mjs). Returns structured validation result. backend/app/services/mermaid_service.py")
+        Component(prompts_module, "Prompts", "Python module", "Contains system prompts for all 4 LLM stages: explanation, component mapping, diagram generation, fix. backend/app/prompts.py")
+        Component(model_config, "Model Config", "Python module", "Resolves which OpenAI model to use from OPENAI_MODEL env var. backend/app/services/model_config.py")
+        Component(pricing_service, "Pricing Service", "Python module", "Estimates generation cost in USD based on model pricing tables and token counts. backend/app/services/pricing.py")
+        Component(observability, "Observability", "Python module", "Structured JSON logging (log_event) and Timer utility. backend/app/core/observability.py")
+        Component(error_handler, "Error Handling", "Python module", "Maps exceptions to safe user-facing error messages. backend/app/core/errors.py")
+        Component(fastapi_app, "FastAPI App", "FastAPI application", "Configures CORS, API Analytics middleware, lifespan, health check. backend/app/main.py")
+
+        Rel(fastapi_app, generate_router, "Includes router")
+        Rel(generate_router, github_service, "Fetches repo data via")
+        Rel(generate_router, openai_service, "Streams LLM completions via")
+        Rel(generate_router, mermaid_service, "Validates Mermaid output with")
+        Rel(generate_router, prompts_module, "Reads system prompts from")
+        Rel(generate_router, model_config, "Gets model name from")
+        Rel(generate_router, pricing_service, "Estimates cost with")
+        Rel(generate_router, observability, "Logs events with")
+    }
+
+    %% ────────────────────────────────────────────────────────────────
+    %% Container: Next.js Legacy Backend (src/server/generate/, src/app/api/generate/)
+    %% ────────────────────────────────────────────────────────────────
+    Container_Boundary(legacy_backend, "Next.js Route Handlers (Legacy)") {
+
+        Component(stream_route, "Stream Route Handler", "Next.js Route Handler", "POST /api/generate/stream — SSE endpoint for 3-stage pipeline. src/app/api/generate/stream/route.ts")
+        Component(cost_route, "Cost Route Handler", "Next.js Route Handler", "POST /api/generate/cost — Token cost estimation. src/app/api/generate/cost/route.ts")
+        Component(ts_github_client, "GitHub Client (TS)", "TypeScript module", "Fetches repo data from GitHub API (mirrors Python GitHubService). src/server/generate/github.ts")
+        Component(ts_openai_client, "OpenAI Client (TS)", "TypeScript module", "Streams completions via OpenAI/Azure OpenAI SDK. src/server/generate/openai.ts")
+        Component(ts_mermaid_validator, "Mermaid Validator (TS)", "TypeScript module", "In-process Mermaid.parse() validation with DOMPurify patching for server context. src/server/generate/mermaid.ts")
+        Component(ts_prompts, "Prompts (TS)", "TypeScript module", "Mirrors backend prompts. src/server/generate/prompts.ts")
+
+        Rel(stream_route, ts_github_client, "Fetches repo data via")
+        Rel(stream_route, ts_openai_client, "Streams completions via")
+        Rel(stream_route, ts_mermaid_validator, "Validates Mermaid with")
+        Rel(stream_route, ts_prompts, "Reads prompts from")
+        Rel(cost_route, ts_github_client, "Fetches repo data via")
+        Rel(cost_route, ts_openai_client, "Counts tokens via")
+    }

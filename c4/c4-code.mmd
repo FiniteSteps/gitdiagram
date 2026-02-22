@@ -1,0 +1,41 @@
+C4Dynamic
+    title Code-Level Diagram – 3-Stage LLM Pipeline (FastAPI Backend)
+
+    %% This diagram shows the runtime sequence of the core generation pipeline
+    %% inside the FastAPI backend's /generate/stream endpoint.
+    %% Evidence: backend/app/routers/generate.py (lines 260-558)
+
+    ContainerDb(postgres, "PostgreSQL", "Diagram cache & history")
+
+    Container_Boundary(backend, "FastAPI Backend") {
+        Component(router, "generate_stream()", "FastAPI endpoint", "POST /generate/stream — SSE event generator coroutine")
+        Component(github_svc, "GitHubService", "Python class", "get_github_data() → GithubData(default_branch, file_tree, readme)")
+        Component(openai_svc, "OpenAIService", "Python class", "stream_completion() → AsyncGenerator[str]; count_input_tokens() → int")
+        Component(mermaid_svc, "validate_mermaid_syntax()", "Python function", "Invokes Node.js subprocess, returns MermaidValidationResult")
+        Component(click_proc, "process_click_events()", "Python function", "Rewrites click paths to full GitHub URLs")
+        Component(prompts, "Prompts Module", "Python constants", "SYSTEM_FIRST_PROMPT, SYSTEM_SECOND_PROMPT, SYSTEM_THIRD_PROMPT, SYSTEM_FIX_MERMAID_PROMPT")
+    }
+
+    System_Ext(github_api, "GitHub API")
+    System_Ext(openai_api, "OpenAI API")
+
+    %% Sequence of operations within SSE event_generator()
+    Rel(router, github_svc, "1. Fetch repo data", "await get_github_data()")
+    Rel(github_svc, github_api, "1a. GET /repos, /git/trees, /readme", "httpx async")
+
+    Rel(router, openai_svc, "2. Stage 1: Explanation", "stream_completion(SYSTEM_FIRST_PROMPT, {file_tree, readme})")
+    Rel(openai_svc, openai_api, "2a. POST /responses (stream=true)", "AsyncOpenAI")
+
+    Rel(router, openai_svc, "3. Stage 2: Component Mapping", "stream_completion(SYSTEM_SECOND_PROMPT, {explanation, file_tree})")
+    Rel(openai_svc, openai_api, "3a. POST /responses (stream=true)", "AsyncOpenAI")
+
+    Rel(router, openai_svc, "4. Stage 3: Diagram Generation", "stream_completion(SYSTEM_THIRD_PROMPT, {explanation, component_mapping})")
+    Rel(openai_svc, openai_api, "4a. POST /responses (stream=true)", "AsyncOpenAI")
+
+    Rel(router, mermaid_svc, "5. Validate Mermaid syntax", "validate_mermaid_syntax(candidate)")
+    Rel(router, openai_svc, "5a. Fix loop (up to 3x)", "stream_completion(SYSTEM_FIX_MERMAID_PROMPT, {mermaid_code, parser_error, ...})")
+    Rel(router, mermaid_svc, "5b. Re-validate after each fix", "validate_mermaid_syntax(repaired)")
+
+    Rel(router, click_proc, "6. Process click events", "process_click_events(diagram, user, repo, branch)")
+
+    Rel(router, router, "7. Emit SSE 'complete'", "yield {status: complete, diagram, explanation, mapping}")

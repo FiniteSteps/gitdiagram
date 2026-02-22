@@ -1,0 +1,34 @@
+C4Container
+    title Container Diagram – GitDiagram
+
+    Person(user, "End User", "Developer visualizing GitHub repos.")
+    Person(admin, "Admin User", "System operator.")
+
+    System_Boundary(gitdiagram, "GitDiagram System") {
+
+        Container(nextjs_app, "Next.js Frontend", "Next.js 16, React 19, TypeScript, Tailwind CSS", "Server-rendered SPA hosted on Vercel. Provides the UI for repo input, diagram rendering (Mermaid.js + SVG pan-zoom), version history, and admin panel.")
+
+        Container(nextjs_api, "Next.js Route Handlers (Legacy Backend)", "Next.js API Routes, TypeScript", "Optional legacy generation backend running inside Next.js. Exposes /api/generate/stream and /api/generate/cost SSE endpoints. Controlled by NEXT_PUBLIC_USE_LEGACY_BACKEND flag.")
+
+        Container(fastapi_backend, "FastAPI Backend", "Python 3.12, FastAPI, uvicorn", "Primary production backend hosted on Railway. Exposes /generate/stream and /generate/cost SSE endpoints for the 3-stage LLM pipeline.")
+
+        ContainerDb(postgres_db, "PostgreSQL Database", "Neon Serverless Postgres (prod) / local Postgres (dev)", "Stores diagram cache, diagram version history, admin settings, prompt sets, prompt stages, prompt history, and audit logs. Tables prefixed gitdiagram_.")
+
+        Container(mermaid_validator_node, "Mermaid Validator (Node.js)", "Node.js script (validate_mermaid.mjs)", "Subprocess invoked by FastAPI backend to validate generated Mermaid syntax. Uses the Mermaid.js parser.")
+    }
+
+    System_Ext(github_api, "GitHub API", "Repository data provider.")
+    System_Ext(openai_api, "OpenAI API / Azure OpenAI", "LLM completion service.")
+    System_Ext(posthog, "PostHog", "Product analytics.")
+
+    Rel(user, nextjs_app, "Browses UI, submits repo URL", "HTTPS")
+    Rel(admin, nextjs_app, "Manages settings via /admin", "HTTPS")
+    Rel(nextjs_app, fastapi_backend, "Streams diagram generation (primary path)", "HTTPS SSE")
+    Rel(nextjs_app, nextjs_api, "Streams diagram generation (legacy fallback)", "HTTPS SSE")
+    Rel(nextjs_app, postgres_db, "Reads/writes diagram cache, versions, admin settings", "Drizzle ORM over TCP/HTTP")
+    Rel(fastapi_backend, github_api, "Fetches file tree, README, default branch", "HTTPS REST")
+    Rel(fastapi_backend, openai_api, "Streams LLM completions (3 stages + fix loop)", "HTTPS REST")
+    Rel(fastapi_backend, mermaid_validator_node, "Validates Mermaid syntax", "subprocess stdin/stdout")
+    Rel(nextjs_api, github_api, "Fetches file tree, README", "HTTPS REST")
+    Rel(nextjs_api, openai_api, "Streams LLM completions", "HTTPS REST")
+    Rel(nextjs_app, posthog, "Sends analytics events", "HTTPS")

@@ -12,7 +12,7 @@ import { useDiagramStream } from "~/hooks/diagram/useDiagramStream";
 import { useDiagramExport } from "~/hooks/diagram/useDiagramExport";
 import { isExampleRepo } from "~/lib/exampleRepos";
 
-export function useDiagram(username: string, repo: string, branch?: string) {
+export function useDiagram(username: string, repo: string, branch?: string, initialVersion?: number) {
   const [diagram, setDiagram] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
@@ -54,15 +54,16 @@ export function useDiagram(username: string, repo: string, branch?: string) {
 
       setDiagram(nextDiagram);
       setLastGenerated(new Date());
-      setLoading(false);
 
-      // Refresh version list and set current to the new version
+      // Refresh version list and set current to the new version BEFORE clearing loading
       const versionList = await refreshVersions();
       if (newVersion) {
         setCurrentVersion(newVersion);
       } else if (versionList.length > 0) {
         setCurrentVersion(versionList[0]!.version);
       }
+
+      setLoading(false);
     },
     [branchKey, repo, username, refreshVersions],
   );
@@ -92,6 +93,28 @@ export function useDiagram(username: string, repo: string, branch?: string) {
     setCost("");
 
     try {
+      // If a specific version was requested, load it directly
+      if (initialVersion) {
+        const specific = await getDiagramByVersion(
+          username,
+          repo,
+          initialVersion,
+          branchKey,
+        );
+        if (specific) {
+          setDiagram(specific.diagram);
+          setLastGenerated(specific.createdAt);
+          setCurrentVersion(specific.version);
+
+          const versionList = await getDiagramVersions(username, repo, branchKey);
+          setVersions(versionList);
+          setTotalVersions(versionList.length);
+          setLoading(false);
+          return;
+        }
+        // Version not found — fall through to latest
+      }
+
       // Try loading from versioned history first
       const latest = await getLatestDiagramFromHistory(
         username,
@@ -104,16 +127,14 @@ export function useDiagram(username: string, repo: string, branch?: string) {
         setLastGenerated(latest.createdAt);
         setCurrentVersion(latest.version);
 
-        // Load version list
+        // Load version list (legacy entries are now seeded into history on first access)
         const versionList = await getDiagramVersions(
           username,
           repo,
           branchKey,
         );
         setVersions(versionList);
-        setTotalVersions(
-          versionList.length > 0 ? versionList.length : 1, // at least 1 for legacy fallback
-        );
+        setTotalVersions(versionList.length);
         setLoading(false);
         return;
       }
@@ -132,7 +153,7 @@ export function useDiagram(username: string, repo: string, branch?: string) {
       setError("Something went wrong. Please try again later.");
       setLoading(false);
     }
-  }, [branchKey, repo, runGeneration, username]);
+  }, [branchKey, initialVersion, repo, runGeneration, username]);
 
   useEffect(() => {
     void getDiagram();

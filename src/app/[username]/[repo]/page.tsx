@@ -3,7 +3,7 @@ import RepoPageClient from "./repo-page-client";
 
 type RepoPageProps = {
   params: Promise<{ username: string; repo: string }>;
-  searchParams: Promise<{ branch?: string }>;
+  searchParams: Promise<{ branch?: string; version?: string }>;
 };
 
 export async function generateMetadata({
@@ -18,6 +18,14 @@ export async function generateMetadata({
 
 export default async function Repo({ params, searchParams }: RepoPageProps) {
   const { username, repo } = await params;
-  const { branch } = await searchParams;
-  return <RepoPageClient username={username} repo={repo} branch={branch} />;
+  const { branch, version } = await searchParams;
+  const initialVersion = version ? parseInt(version, 10) : undefined;
+  return (
+    <RepoPageClient
+      username={username}
+      repo={repo}
+      branch={branch}
+      initialVersion={Number.isFinite(initialVersion) ? initialVersion : undefined}
+    />
+  );
 }

@@ -108,3 +108,7 @@ Minimum required (see `.env.example` for full list):
 - `OPENAI_API_KEY` — used for all generation stages
 - `GITHUB_PAT` — optional but avoids GitHub rate limits
 - `OPENAI_MODEL` — single model for all three pipeline stages
+
+## Ignore Folders
+
+.history/ - local history for VSCode, not relevant to the project

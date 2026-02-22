@@ -14,6 +14,13 @@ interface UseDiagramStreamOptions {
   onError: (message: string) => void;
 }
 
+/** Well-known tags that map to named state fields for backward compat. */
+const WELL_KNOWN_TAGS: Record<string, keyof Pick<DiagramStreamState, "explanation" | "mapping" | "diagram">> = {
+  explanation: "explanation",
+  mapping: "mapping",
+  diagram: "diagram",
+};
+
 export function useDiagramStream({
   username,
   repo,
@@ -31,6 +38,7 @@ export function useDiagramStream({
         mapping: string;
         diagram: string;
         fixDiagramDraft: string;
+        stageOutputs: Record<string, string>;
       },
     ) => {
       if (data.error) {
@@ -44,93 +52,101 @@ export function useDiagramStream({
         return false;
       }
 
-      switch (data.status) {
-        case "started":
-        case "explanation_sent":
-        case "explanation":
-        case "mapping_sent":
-        case "mapping":
-        case "diagram_sent":
-        case "diagram":
-        case "diagram_fixing":
-        case "diagram_fix_attempt":
-        case "diagram_fix_validating":
-          setState((prev) => ({
-            ...prev,
-            status: data.status,
-            message: data.message,
-            parserError: data.parser_error,
-            fixAttempt: data.fix_attempt,
-            fixMaxAttempts: data.fix_max_attempts,
-            ...(data.status === "diagram_fix_attempt"
-              ? { fixDiagramDraft: "" }
-              : {}),
-          }));
-          break;
-        case "diagram_fix_chunk":
-          if (data.chunk) {
-            buffers.fixDiagramDraft += data.chunk;
-            setState((prev) => ({
-              ...prev,
-              status: "diagram_fix_chunk",
-              fixDiagramDraft: buffers.fixDiagramDraft,
-              fixAttempt: data.fix_attempt ?? prev.fixAttempt,
-              fixMaxAttempts: data.fix_max_attempts ?? prev.fixMaxAttempts,
-            }));
-          }
-          break;
-        case "explanation_chunk":
-          if (data.chunk) {
-            buffers.explanation += data.chunk;
-            setState((prev) => ({
-              ...prev,
-              status: "explanation_chunk",
-              explanation: buffers.explanation,
-            }));
-          }
-          break;
-        case "mapping_chunk":
-          if (data.chunk) {
-            buffers.mapping += data.chunk;
-            setState((prev) => ({
-              ...prev,
-              status: "mapping_chunk",
-              mapping: buffers.mapping,
-            }));
-          }
-          break;
-        case "diagram_chunk":
-          if (data.chunk) {
-            buffers.diagram += data.chunk;
-            setState((prev) => ({
-              ...prev,
-              status: "diagram_chunk",
-              diagram: buffers.diagram,
-            }));
-          }
-          break;
-        case "complete": {
-          const explanation = data.explanation ?? buffers.explanation;
-          const diagram = data.diagram ?? buffers.diagram;
-          setState({
-            status: "complete",
-            explanation,
-            diagram,
-            mapping: data.mapping ?? buffers.mapping,
-          });
-          await onComplete({ explanation, diagram });
-          return false;
-        }
-        case "error":
-          setState({
-            status: "error",
-            error: data.error,
-            parserError: data.parser_error,
-          });
-          if (data.error) onError(data.error);
-          return false;
+      const status = data.status as string;
+
+      // ── Pipeline metadata ──────────────────────────────────────
+      if (status === "stage_info") {
+        setState((prev) => ({
+          ...prev,
+          status: "stage_info",
+          stageInfo: data.stages,
+          totalStages: data.total_stages,
+        }));
+        return true;
       }
 
+      // ── Completion ─────────────────────────────────────────────
+      if (status === "complete") {
+        const explanation = data.explanation ?? buffers.explanation;
+        const diagram = data.diagram ?? buffers.diagram;
+        setState({
+          status: "complete",
+          explanation,
+          diagram,
+          mapping: data.mapping ?? buffers.mapping,
+          stageOutputs: { ...buffers.stageOutputs },
+        });
+        await onComplete({ explanation, diagram });
+        return false;
+      }
+
+      // ── Error ──────────────────────────────────────────────────
+      if (status === "error") {
+        setState({
+          status: "error",
+          error: data.error,
+          parserError: data.parser_error,
+        });
+        if (data.error) onError(data.error);
+        return false;
+      }
+
+      // ── Fix-loop events (diagram_fix_*) ────────────────────────
+      if (status === "diagram_fix_chunk") {
+        if (data.chunk) {
+          buffers.fixDiagramDraft += data.chunk;
+          setState((prev) => ({
+            ...prev,
+            status: "diagram_fix_chunk",
+            fixDiagramDraft: buffers.fixDiagramDraft,
+            fixAttempt: data.fix_attempt ?? prev.fixAttempt,
+            fixMaxAttempts: data.fix_max_attempts ?? prev.fixMaxAttempts,
+          }));
+        }
+        return true;
+      }
+
+      if (status.startsWith("diagram_fix") || status === "diagram_fixing") {
+        setState((prev) => ({
+          ...prev,
+          status,
+          message: data.message,
+          parserError: data.parser_error,
+          fixAttempt: data.fix_attempt ?? prev.fixAttempt,
+          fixMaxAttempts: data.fix_max_attempts ?? prev.fixMaxAttempts,
+          ...(status === "diagram_fix_attempt" ? { fixDiagramDraft: "" } : {}),
+        }));
+        return true;
+      }
+
+      // ── Dynamic stage chunk ({tag}_chunk) ──────────────────────
+      if (status.endsWith("_chunk") && data.chunk) {
+        const tag = status.slice(0, -6); // strip "_chunk"
+        buffers.stageOutputs[tag] = (buffers.stageOutputs[tag] ?? "") + data.chunk;
+        const output = buffers.stageOutputs[tag]!;
+
+        // Also populate well-known named buffers for backward compat
+        const wellKnown = WELL_KNOWN_TAGS[tag];
+        if (wellKnown === "explanation") buffers.explanation = output;
+        else if (wellKnown === "mapping") buffers.mapping = output;
+        else if (wellKnown === "diagram") buffers.diagram = output;
+
+        setState((prev) => ({
+          ...prev,
+          status,
+          stageOutputs: { ...buffers.stageOutputs },
+          ...(wellKnown ? { [wellKnown]: output } : {}),
+        }));
+        return true;
+      }
+
+      // ── Stage sent / processing ({tag}_sent, {tag}) or started ─
+      setState((prev) => ({
+        ...prev,
+        status,
+        message: data.message,
+        ...(data.stage_index !== undefined ? { currentStageIndex: data.stage_index } : {}),
+      }));
       return true;
     },
     [onComplete, onError],
@@ -144,6 +160,7 @@ export function useDiagramStream({
         mapping: "",
         diagram: "",
         fixDiagramDraft: "",
+        stageOutputs: {} as Record<string, string>,
       };
 
       await streamDiagramGeneration(

@@ -95,6 +95,65 @@ export const adminSettings = createTable("admin_settings", {
   ),
 });
 
+// ── Prompt sets ─────────────────────────────────────────────────────
+export const promptSets = createTable("prompt_sets", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 256 }).notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+    () => new Date(),
+  ),
+});
+
+// ── Prompt stages (ordered prompts within a set) ────────────────────
+export const promptStages = createTable(
+  "prompt_stages",
+  {
+    id: serial("id").primaryKey(),
+    promptSetId: integer("prompt_set_id")
+      .notNull()
+      .references(() => promptSets.id, { onDelete: "cascade" }),
+    stageOrder: integer("stage_order").notNull(), // 1-based ordering
+    stageName: varchar("stage_name", { length: 128 }).notNull(), // e.g. "Explanation", "Component Mapping", "Diagram"
+    stageTag: varchar("stage_tag", { length: 64 }).notNull(), // e.g. "explanation", "mapping", "diagram", "fix"
+    systemPrompt: text("system_prompt").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .default(sql`CURRENT_TIMESTAMP`)
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+      () => new Date(),
+    ),
+  },
+  (table) => ({
+    setStageIdx: index("prompt_stages_set_idx").on(
+      table.promptSetId,
+      table.stageOrder,
+    ),
+  }),
+);
+
+// ── Prompt history (immutable audit trail of prompt edits) ──────────
+export const promptHistory = createTable("prompt_history", {
+  id: serial("id").primaryKey(),
+  promptSetId: integer("prompt_set_id")
+    .notNull()
+    .references(() => promptSets.id, { onDelete: "cascade" }),
+  promptStageId: integer("prompt_stage_id")
+    .notNull()
+    .references(() => promptStages.id, { onDelete: "cascade" }),
+  stageName: varchar("stage_name", { length: 128 }).notNull(),
+  systemPrompt: text("system_prompt").notNull(),
+  version: integer("version").notNull().default(1),
+  changeNote: text("change_note"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
+});
+
 // ── Admin audit log ─────────────────────────────────────────────────
 export const adminAuditLog = createTable("admin_audit_log", {
   id: serial("id").primaryKey(),

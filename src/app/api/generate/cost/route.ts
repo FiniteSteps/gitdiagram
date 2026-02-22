@@ -8,6 +8,7 @@ import { SYSTEM_FIRST_PROMPT } from "~/server/generate/prompts";
 import { estimateTextTokenCostUsd } from "~/server/generate/pricing";
 import { generateRequestSchema } from "~/server/generate/types";
 import { getResolvedAdminConfig } from "~/server/generate/admin-config";
+import { getActivePromptStages } from "~/app/_actions/prompts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,11 +23,12 @@ async function estimateRepoInputTokens(
   readme: string,
   apiKey?: string,
   azure?: AzureOpenAIOptions,
+  explanationSystemPrompt?: string,
 ) {
   try {
     return await countInputTokens({
       model,
-      systemPrompt: SYSTEM_FIRST_PROMPT,
+      systemPrompt: explanationSystemPrompt ?? SYSTEM_FIRST_PROMPT,
       userPrompt: toTaggedMessage({
         file_tree: fileTree,
         readme,
@@ -58,6 +60,13 @@ export async function POST(request: Request) {
     const apiKey = adminConfig.apiKey;
     const azure = adminConfig.azure;
     const githubPat = adminConfig.githubPat;
+
+    // Fetch active prompt set for accurate token estimation
+    const activeStages = await getActivePromptStages();
+    const regularStages = activeStages.filter((s) => s.stageTag !== "fix");
+    const firstStagePrompt =
+      regularStages[0]?.systemPrompt ?? SYSTEM_FIRST_PROMPT;
+
     const githubData = await getGithubData(username, repo, githubPat, branch);
     const model = adminConfig.model || getModel();
 
@@ -67,6 +76,7 @@ export async function POST(request: Request) {
       githubData.readme,
       apiKey,
       azure,
+      firstStagePrompt,
     );
     const estimatedInputTokens =
       baseInputTokens * MULTI_STAGE_INPUT_MULTIPLIER + INPUT_OVERHEAD_TOKENS;

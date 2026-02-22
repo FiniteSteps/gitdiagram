@@ -11,9 +11,10 @@ type RepoPageClientProps = {
   username: string;
   repo: string;
   branch?: string;
+  initialVersion?: number;
 };
 
-export default function RepoPageClient({ username, repo, branch }: RepoPageClientProps) {
+export default function RepoPageClient({ username, repo, branch, initialVersion }: RepoPageClientProps) {
   const [zoomingEnabled, setZoomingEnabled] = useState(false);
 
   useStarReminder();
@@ -36,7 +37,7 @@ export default function RepoPageClient({ username, repo, branch }: RepoPageClien
     totalVersions,
     versionLoading,
     selectVersion,
-  } = useDiagram(normalizedUsername, normalizedRepo, branch);
+  } = useDiagram(normalizedUsername, normalizedRepo, branch, initialVersion);
 
   return (
     <div className="flex flex-col items-center p-4">
@@ -73,6 +74,10 @@ export default function RepoPageClient({ username, repo, branch }: RepoPageClien
             explanation={state.explanation}
             mapping={state.mapping}
             diagram={state.diagram}
+            stageInfo={state.stageInfo}
+            stageOutputs={state.stageOutputs}
+            totalStages={state.totalStages}
+            currentStageIndex={state.currentStageIndex}
           />
         ) : error || state.error ? (
           <div className="mt-12 text-center">

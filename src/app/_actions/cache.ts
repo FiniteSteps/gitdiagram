@@ -195,7 +195,8 @@ export async function getDiagramByVersion(
 
 /**
  * Get the latest version's diagram + metadata from history.
- * Falls back to the legacy cache table if no history exists.
+ * Falls back to the legacy cache table if no history exists,
+ * and seeds the history table so future versioning works correctly.
  */
 export async function getLatestDiagramFromHistory(
   username: string,
@@ -223,7 +224,8 @@ export async function getLatestDiagramFromHistory(
 
     if (row) return row;
 
-    // Fallback: old cache table (pre-versioning diagrams)
+    // Fallback: old cache table (pre-versioning diagrams).
+    // Seed history so version tracking works for future regenerations.
     const [legacy] = await db
       .select()
       .from(diagramCache)
@@ -237,11 +239,28 @@ export async function getLatestDiagramFromHistory(
       .limit(1);
 
     if (legacy) {
+      const seedCreatedAt = legacy.updatedAt ?? legacy.createdAt;
+
+      // Seed history table with version 1
+      try {
+        await db.insert(diagramHistory).values({
+          username: legacy.username,
+          repo: legacy.repo,
+          branch: legacy.branch,
+          version: 1,
+          diagram: legacy.diagram,
+          explanation: legacy.explanation,
+          usedOwnKey: legacy.usedOwnKey,
+        });
+      } catch {
+        // Ignore duplicate insert if another request raced
+      }
+
       return {
         diagram: legacy.diagram,
         explanation: legacy.explanation,
         version: 1 as number,
-        createdAt: legacy.updatedAt ?? legacy.createdAt,
+        createdAt: seedCreatedAt,
       };
     }
 

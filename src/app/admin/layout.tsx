@@ -8,6 +8,7 @@ import { ThemeToggle } from "~/components/theme-toggle";
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: "📊" },
   { href: "/admin/settings", label: "Settings", icon: "⚙️" },
+  { href: "/admin/prompts", label: "Prompts", icon: "📝" },
   { href: "/admin/cache", label: "Cache", icon: "🗄️" },
   { href: "/admin/audit", label: "Audit Log", icon: "📋" },
 ];
