@@ -6,7 +6,7 @@ import { getModel } from "~/server/generate/model-config";
 import { countInputTokens, estimateTokens, type AzureOpenAIOptions } from "~/server/generate/openai";
 import { SYSTEM_FIRST_PROMPT } from "~/server/generate/prompts";
 import { estimateTextTokenCostUsd } from "~/server/generate/pricing";
-import { generateRequestSchema, type ModelConfigPayload } from "~/server/generate/types";
+import { generateRequestSchema } from "~/server/generate/types";
 import { getResolvedAdminConfig } from "~/server/generate/admin-config";
 
 export const runtime = "nodejs";
@@ -15,27 +15,6 @@ export const maxDuration = 300;
 const MULTI_STAGE_INPUT_MULTIPLIER = 2;
 const INPUT_OVERHEAD_TOKENS = 3000;
 const ESTIMATED_OUTPUT_TOKENS = 8000;
-
-function resolveModelConfig(mc?: ModelConfigPayload): {
-  apiKey?: string;
-  azure?: AzureOpenAIOptions;
-  modelOverride?: string;
-} {
-  if (!mc) return {};
-  const azure: AzureOpenAIOptions | undefined =
-    mc.provider === "azure_openai" && mc.azure
-      ? {
-          endpoint: mc.azure.endpoint,
-          deployment: mc.azure.deployment,
-          apiVersion: mc.azure.api_version,
-        }
-      : undefined;
-  return {
-    apiKey: mc.api_key ?? undefined,
-    azure,
-    modelOverride: mc.model_name ?? undefined,
-  };
-}
 
 async function estimateRepoInputTokens(
   model: string,

@@ -3,6 +3,11 @@ from __future__ import annotations
 import json
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
+
+_VALIDATE_SCRIPT = str(
+    Path(__file__).resolve().parent.parent.parent / "scripts" / "validate_mermaid.mjs"
+)
 
 
 @dataclass(frozen=True)
@@ -27,11 +32,17 @@ def normalize_parser_message(message: str | None) -> str:
 def validate_mermaid_syntax(diagram: str) -> MermaidValidationResult:
     try:
         proc = subprocess.run(
-            ["node", "scripts/validate_mermaid.mjs"],
+            ["node", _VALIDATE_SCRIPT],
             input=diagram,
             text=True,
             capture_output=True,
             check=False,
+            timeout=30,
+        )
+    except subprocess.TimeoutExpired:
+        return MermaidValidationResult(
+            valid=False,
+            message="Mermaid validation timed out after 30 seconds.",
         )
     except Exception as exc:
         return MermaidValidationResult(

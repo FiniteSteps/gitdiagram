@@ -22,7 +22,7 @@ import {
   SYSTEM_SECOND_PROMPT,
   SYSTEM_THIRD_PROMPT,
 } from "~/server/generate/prompts";
-import { generateRequestSchema, type ModelConfigPayload, sseMessage } from "~/server/generate/types";
+import { generateRequestSchema, sseMessage } from "~/server/generate/types";
 import { getResolvedAdminConfig } from "~/server/generate/admin-config";
 
 export const runtime = "nodejs";
@@ -42,27 +42,6 @@ function resolveReasoningEffort(
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function resolveModelConfig(mc?: ModelConfigPayload): {
-  apiKey?: string;
-  azure?: AzureOpenAIOptions;
-  modelOverride?: string;
-} {
-  if (!mc) return {};
-  const azure: AzureOpenAIOptions | undefined =
-    mc.provider === "azure_openai" && mc.azure
-      ? {
-          endpoint: mc.azure.endpoint,
-          deployment: mc.azure.deployment,
-          apiVersion: mc.azure.api_version,
-        }
-      : undefined;
-  return {
-    apiKey: mc.api_key ?? undefined,
-    azure,
-    modelOverride: mc.model_name ?? undefined,
-  };
 }
 
 async function estimateRepoTokenCount(

@@ -33,7 +33,7 @@ EXCLUDED_PATTERNS = [
     ".tmp/",
     "yarn.lock",
     "poetry.lock",
-    "*.log",
+    ".log",
     ".vscode/",
     ".idea/",
 ]

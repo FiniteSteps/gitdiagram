@@ -13,7 +13,7 @@ export async function getLastGeneratedDate(username: string, repo: string) {
         and(eq(diagramCache.username, username), eq(diagramCache.repo, repo)),
       );
 
-    return result[0]?.updatedAt;
+    return result[0]?.updatedAt ?? result[0]?.createdAt;
   } catch (error) {
     console.error("Error fetching last generated date:", error);
     return undefined;

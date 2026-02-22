@@ -26,13 +26,18 @@ export function exportMermaidSvgAsPng(svgElement: SVGSVGElement): void {
 
     const anchor = document.createElement("a");
     anchor.download = "diagram.png";
-    anchor.href = canvas.toDataURL("image/png", 1.0);
+    anchor.href = canvas.toDataURL("image/png", 1);
     document.body.appendChild(anchor);
     anchor.click();
-    document.body.removeChild(anchor);
+    anchor.remove();
   };
 
-  img.src =
-    "data:image/svg+xml;base64," +
-    btoa(unescape(encodeURIComponent(svgData)));
+  // Convert SVG string to base64 without deprecated unescape()
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(svgData);
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCodePoint(byte);
+  }
+  img.src = "data:image/svg+xml;base64," + btoa(binary);
 }

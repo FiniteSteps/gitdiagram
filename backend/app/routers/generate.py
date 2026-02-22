@@ -48,8 +48,8 @@ class ModelConfigPayload(BaseModel):
 class GenerateRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    username: str = Field(min_length=1)
-    repo: str = Field(min_length=1)
+    username: str = Field(min_length=1, pattern=r"^[a-zA-Z0-9._-]+$")
+    repo: str = Field(min_length=1, pattern=r"^[a-zA-Z0-9._-]+$")
     api_key: str | None = Field(default=None, min_length=1)
     github_pat: str | None = Field(default=None, min_length=1)
     llm_config: ModelConfigPayload | None = Field(default=None, alias="model_config")
@@ -102,7 +102,7 @@ def _extract_component_mapping(response: str) -> str:
     end_index = response.find(end_tag)
     if start_index == -1 or end_index == -1:
         return response
-    return response[start_index:end_index]
+    return response[start_index + len(start_tag):end_index]
 
 
 def process_click_events(diagram: str, username: str, repo: str, branch: str) -> str:
@@ -167,7 +167,8 @@ async def get_generation_cost(request: Request):
                     "ok": False,
                     "error": error,
                     "error_code": "VALIDATION_ERROR",
-                }
+                },
+                status_code=400,
             )
 
         github_data = _get_github_data(parsed.username, parsed.repo, parsed.github_pat)
@@ -221,7 +222,8 @@ async def get_generation_cost(request: Request):
                 "ok": False,
                 "error": str(exc) if isinstance(exc, Exception) else "Failed to estimate generation cost.",
                 "error_code": "COST_ESTIMATION_FAILED",
-            }
+            },
+            status_code=500,
         )
 
 

@@ -15,10 +15,6 @@ vi.mock("~/features/diagram/api", () => ({
   }),
 }));
 
-vi.mock("~/components/model-config-dialog", () => ({
-  getModelConfig: vi.fn(() => undefined),
-}));
-
 // Ensure localStorage is available in test env
 const localStorageMock = {
   getItem: vi.fn(() => null),

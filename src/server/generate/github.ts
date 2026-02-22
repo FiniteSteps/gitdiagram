@@ -139,21 +139,26 @@ async function getReadme(
   repo: string,
   headers: HeadersInit,
 ): Promise<string> {
-  const data = await fetchJson<GitHubReadmeResponse>(
-    `https://api.github.com/repos/${username}/${repo}/readme`,
-    headers,
-    "No README found for the specified repository.",
-  );
+  try {
+    const data = await fetchJson<GitHubReadmeResponse>(
+      `https://api.github.com/repos/${username}/${repo}/readme`,
+      headers,
+      "No README found for the specified repository.",
+    );
 
-  if (!data.content) {
-    throw new Error("No README found for the specified repository.");
+    if (!data.content) {
+      return "";
+    }
+
+    if (data.encoding === "base64") {
+      return Buffer.from(data.content, "base64").toString("utf-8");
+    }
+
+    return data.content;
+  } catch {
+    // Repos without a README should still generate diagrams (from file tree only)
+    return "";
   }
-
-  if (data.encoding === "base64") {
-    return Buffer.from(data.content, "base64").toString("utf-8");
-  }
-
-  return data.content;
 }
 
 export async function getGithubData(

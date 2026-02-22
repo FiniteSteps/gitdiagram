@@ -4,11 +4,23 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
 import { useState, useEffect, useCallback } from "react";
-import type {
-  LLMProvider,
-  ModelConfig,
-  AzureOpenAIConfig,
-} from "~/features/diagram/types";
+
+// NOTE: This component is unused (kept for reference). Types defined locally
+// since they were removed from the shared types module during the admin-panel refactor.
+type LLMProvider = "openai" | "azure_openai";
+
+interface AzureOpenAIConfig {
+  endpoint: string;
+  deployment: string;
+  apiVersion: string;
+}
+
+interface ModelConfig {
+  provider: LLMProvider;
+  modelName?: string;
+  apiKey?: string;
+  azure?: AzureOpenAIConfig;
+}
 
 const MODEL_CONFIG_KEY = "model_config";
 
