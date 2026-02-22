@@ -25,8 +25,9 @@ export const diagramCache = createTable(
   {
     username: varchar("username", { length: 256 }).notNull(),
     repo: varchar("repo", { length: 256 }).notNull(),
-    diagram: varchar("diagram", { length: 10000 }).notNull(), // Adjust length as needed
-    explanation: varchar("explanation", { length: 10000 })
+    branch: varchar("branch", { length: 512 }).notNull().default(""),
+    diagram: text("diagram").notNull(),
+    explanation: text("explanation")
       .notNull()
       .default("No explanation provided"), // Default explanation to avoid data loss of existing rows
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -38,7 +39,7 @@ export const diagramCache = createTable(
     usedOwnKey: boolean("used_own_key").default(false),
   },
   (table) => ({
-    pk: primaryKey({ columns: [table.username, table.repo] }),
+    pk: primaryKey({ columns: [table.username, table.repo, table.branch] }),
   }),
 );
 

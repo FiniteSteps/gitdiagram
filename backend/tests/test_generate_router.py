@@ -17,7 +17,7 @@ def test_healthz_ok():
 
 
 def test_generate_cost_success(monkeypatch):
-    async def fake_get_github_data(username, repo, github_pat=None):
+    async def fake_get_github_data(username, repo, github_pat=None, branch=None):
         return SimpleNamespace(
             default_branch="main",
             file_tree="src/main.py",
@@ -52,7 +52,7 @@ def test_generate_cost_success(monkeypatch):
 
 
 def test_generate_cost_error(monkeypatch):
-    async def fail_github_data(username, repo, github_pat=None):
+    async def fail_github_data(username, repo, github_pat=None, branch=None):
         raise ValueError("repo not found")
 
     monkeypatch.setattr(generate, "_get_github_data", fail_github_data)
@@ -69,7 +69,7 @@ def test_generate_cost_error(monkeypatch):
 
 
 def test_generate_stream_event_order_with_fix_loop(monkeypatch):
-    async def fake_get_github_data(username, repo, github_pat=None):
+    async def fake_get_github_data(username, repo, github_pat=None, branch=None):
         return SimpleNamespace(
             default_branch="main",
             file_tree="src/main.py",

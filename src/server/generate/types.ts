@@ -16,6 +16,7 @@ const modelConfigSchema = z.object({
 export const generateRequestSchema = z.object({
   username: z.string().min(1),
   repo: z.string().min(1),
+  branch: z.string().min(1).optional(),
   // Kept for backward-compat with the FastAPI backend; the Next.js frontend
   // no longer sends these — the values come from admin settings in the DB.
   api_key: z.string().min(1).optional(),

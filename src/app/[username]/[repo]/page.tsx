@@ -3,6 +3,7 @@ import RepoPageClient from "./repo-page-client";
 
 type RepoPageProps = {
   params: Promise<{ username: string; repo: string }>;
+  searchParams: Promise<{ branch?: string }>;
 };
 
 export async function generateMetadata({
@@ -15,7 +16,8 @@ export async function generateMetadata({
   };
 }
 
-export default async function Repo({ params }: RepoPageProps) {
+export default async function Repo({ params, searchParams }: RepoPageProps) {
   const { username, repo } = await params;
-  return <RepoPageClient username={username} repo={repo} />;
+  const { branch } = await searchParams;
+  return <RepoPageClient username={username} repo={repo} branch={branch} />;
 }

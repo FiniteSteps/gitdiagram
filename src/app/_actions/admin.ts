@@ -157,6 +157,7 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
 export interface CacheEntry {
   username: string;
   repo: string;
+  branch: string;
   createdAt: Date;
   updatedAt: Date | null;
   usedOwnKey: boolean | null;
@@ -168,6 +169,7 @@ export async function listCachedDiagrams(): Promise<CacheEntry[]> {
       .select({
         username: diagramCache.username,
         repo: diagramCache.repo,
+        branch: diagramCache.branch,
         createdAt: diagramCache.createdAt,
         updatedAt: diagramCache.updatedAt,
         usedOwnKey: diagramCache.usedOwnKey,
@@ -184,17 +186,19 @@ export async function listCachedDiagrams(): Promise<CacheEntry[]> {
 export async function deleteCacheEntry(
   username: string,
   repo: string,
+  branch = "",
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     await db
       .delete(diagramCache)
       .where(
-        sql`${diagramCache.username} = ${username} AND ${diagramCache.repo} = ${repo}`,
+        sql`${diagramCache.username} = ${username} AND ${diagramCache.repo} = ${repo} AND ${diagramCache.branch} = ${branch}`,
       );
 
+    const branchLabel = branch ? ` (branch: ${branch})` : "";
     await db.insert(adminAuditLog).values({
       action: "cache_delete",
-      details: `Deleted cache: ${username}/${repo}`,
+      details: `Deleted cache: ${username}/${repo}${branchLabel}`,
     });
 
     return { ok: true };

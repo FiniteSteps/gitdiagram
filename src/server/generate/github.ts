@@ -165,9 +165,10 @@ export async function getGithubData(
   username: string,
   repo: string,
   githubPat?: string,
+  branch?: string,
 ): Promise<GithubData> {
   const headers = createHeaders(githubPat);
-  const defaultBranch = await getDefaultBranch(username, repo, headers);
+  const defaultBranch = branch ?? await getDefaultBranch(username, repo, headers);
   const [fileTree, readme] = await Promise.all([
     getFileTree(username, repo, defaultBranch, headers),
     getReadme(username, repo, headers),

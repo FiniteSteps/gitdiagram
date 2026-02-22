@@ -25,7 +25,7 @@ cd backend
 uv sync --no-install-project   # Install pinned deps into .venv
 uv run pytest -q               # Run all backend tests
 uv run pytest tests/path/test_file.py::test_name  # Run single test
-uv run python -m compileall app  # Compile check
+uv run python -m compileall app uv run python -m compileall app  # Compile check
 ```
 
 ### Database

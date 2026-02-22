@@ -10,9 +10,10 @@ import { useStarReminder } from "~/hooks/useStarReminder";
 type RepoPageClientProps = {
   username: string;
   repo: string;
+  branch?: string;
 };
 
-export default function RepoPageClient({ username, repo }: RepoPageClientProps) {
+export default function RepoPageClient({ username, repo, branch }: RepoPageClientProps) {
   const [zoomingEnabled, setZoomingEnabled] = useState(false);
 
   useStarReminder();
@@ -30,7 +31,7 @@ export default function RepoPageClient({ username, repo }: RepoPageClientProps) 
     handleExportImage,
     handleRegenerate,
     state,
-  } = useDiagram(normalizedUsername, normalizedRepo);
+  } = useDiagram(normalizedUsername, normalizedRepo, branch);
 
   return (
     <div className="flex flex-col items-center p-4">
@@ -39,6 +40,7 @@ export default function RepoPageClient({ username, repo }: RepoPageClientProps) 
           isHome={false}
           username={normalizedUsername}
           repo={normalizedRepo}
+          branch={branch}
           onCopy={handleCopy}
           lastGenerated={lastGenerated}
           onExportImage={handleExportImage}

@@ -210,10 +210,10 @@ class GitHubService:
             return base64.b64decode(content).decode("utf-8")
         return content
 
-    async def get_github_data(self, username: str, repo: str) -> GithubData:
+    async def get_github_data(self, username: str, repo: str, *, branch: str | None = None) -> GithubData:
         async with httpx.AsyncClient() as client:
             headers = await self._get_headers(client)
-            default_branch = await self.get_default_branch(client, username, repo, headers)
+            default_branch = branch or await self.get_default_branch(client, username, repo, headers)
 
             # Parallelize file tree and README fetches
             file_tree, readme = await asyncio.gather(

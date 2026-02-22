@@ -26,15 +26,18 @@ export default function CacheTable({
     : entries;
 
   const handleDelete = useCallback(
-    async (username: string, repo: string) => {
-      const key = `${username}/${repo}`;
+    async (username: string, repo: string, branch: string) => {
+      const key = `${username}/${repo}${branch ? `@${branch}` : ""}`;
       setDeleting(key);
       setErrorMsg(null);
       try {
-        const result = await deleteCacheEntry(username, repo);
+        const result = await deleteCacheEntry(username, repo, branch);
         if (result.ok) {
           setEntries((prev) =>
-            prev.filter((e) => !(e.username === username && e.repo === repo)),
+            prev.filter(
+              (e) =>
+                !(e.username === username && e.repo === repo && e.branch === branch),
+            ),
           );
         } else {
           setErrorMsg(result.error ?? `Failed to delete ${key}`);
@@ -133,7 +136,10 @@ export default function CacheTable({
             </thead>
             <tbody>
               {filtered.map((entry) => {
-                const key = `${entry.username}/${entry.repo}`;
+                const key = `${entry.username}/${entry.repo}${entry.branch ? `@${entry.branch}` : ""}`;
+                const branchParam = entry.branch
+                  ? `?branch=${encodeURIComponent(entry.branch)}`
+                  : "";
                 return (
                   <tr
                     key={key}
@@ -141,12 +147,17 @@ export default function CacheTable({
                   >
                     <td className="px-4 py-2 font-medium text-black dark:text-neutral-200">
                       <a
-                        href={`/${entry.username}/${entry.repo}`}
+                        href={`/${entry.username}/${entry.repo}${branchParam}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-purple-600 hover:underline dark:text-[hsl(var(--neo-button))]"
                       >
-                        {key}
+                        {entry.username}/{entry.repo}
+                        {entry.branch && (
+                          <span className="ml-1 text-xs text-gray-500 dark:text-neutral-500">
+                            @{entry.branch}
+                          </span>
+                        )}
                       </a>
                     </td>
                     <td className="px-4 py-2 whitespace-nowrap text-gray-500 dark:text-neutral-500">
@@ -162,7 +173,11 @@ export default function CacheTable({
                         type="button"
                         disabled={deleting === key}
                         onClick={() =>
-                          void handleDelete(entry.username, entry.repo)
+                          void handleDelete(
+                            entry.username,
+                            entry.repo,
+                            entry.branch,
+                          )
                         }
                         className={`${btnClass} text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950`}
                       >

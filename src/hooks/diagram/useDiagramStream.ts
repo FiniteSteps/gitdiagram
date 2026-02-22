@@ -9,6 +9,7 @@ import type {
 interface UseDiagramStreamOptions {
   username: string;
   repo: string;
+  branch?: string;
   onComplete: (result: { diagram: string; explanation: string }) => Promise<void>;
   onError: (message: string) => void;
 }
@@ -16,6 +17,7 @@ interface UseDiagramStreamOptions {
 export function useDiagramStream({
   username,
   repo,
+  branch,
   onComplete,
   onError,
 }: UseDiagramStreamOptions) {
@@ -148,13 +150,14 @@ export function useDiagramStream({
         {
           username,
           repo,
+          branch,
         },
         {
           onMessage: (message) => handleStreamMessage(message, buffers),
         },
       );
     },
-    [handleStreamMessage, repo, username],
+    [branch, handleStreamMessage, repo, username],
   );
 
   return {

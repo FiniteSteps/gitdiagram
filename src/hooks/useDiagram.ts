@@ -10,12 +10,14 @@ import { useDiagramStream } from "~/hooks/diagram/useDiagramStream";
 import { useDiagramExport } from "~/hooks/diagram/useDiagramExport";
 import { isExampleRepo } from "~/lib/exampleRepos";
 
-export function useDiagram(username: string, repo: string) {
+export function useDiagram(username: string, repo: string, branch?: string) {
   const [diagram, setDiagram] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
   const [lastGenerated, setLastGenerated] = useState<Date | undefined>();
   const [cost, setCost] = useState<string>("");
+
+  const branchKey = branch ?? "";
 
   const onStreamComplete = useCallback(
     async ({
@@ -31,14 +33,15 @@ export function useDiagram(username: string, repo: string) {
         nextDiagram,
         explanation || "No explanation provided",
         false,
+        branchKey,
       );
 
       setDiagram(nextDiagram);
-      const date = await getLastGeneratedDate(username, repo);
+      const date = await getLastGeneratedDate(username, repo, branchKey);
       setLastGenerated(date ?? undefined);
       setLoading(false);
     },
-    [repo, username],
+    [branchKey, repo, username],
   );
 
   const onStreamError = useCallback((message: string) => {
@@ -49,6 +52,7 @@ export function useDiagram(username: string, repo: string) {
   const { state, runGeneration } = useDiagramStream({
     username,
     repo,
+    branch,
     onComplete: onStreamComplete,
     onError: onStreamError,
   });
@@ -65,11 +69,11 @@ export function useDiagram(username: string, repo: string) {
     setCost("");
 
     try {
-      const cached = await getCachedDiagram(username, repo);
+      const cached = await getCachedDiagram(username, repo, branchKey);
 
       if (cached) {
         setDiagram(cached);
-        const date = await getLastGeneratedDate(username, repo);
+        const date = await getLastGeneratedDate(username, repo, branchKey);
         setLastGenerated(date ?? undefined);
         setLoading(false);
         return;
@@ -89,7 +93,7 @@ export function useDiagram(username: string, repo: string) {
       setError("Something went wrong. Please try again later.");
       setLoading(false);
     }
-  }, [repo, runGeneration, username]);
+  }, [branchKey, repo, runGeneration, username]);
 
   useEffect(() => {
     void getDiagram();

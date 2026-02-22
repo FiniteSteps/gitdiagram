@@ -17,6 +17,7 @@ interface MainCardProps {
   isHome?: boolean;
   username?: string;
   repo?: string;
+  branch?: string;
   onCopy?: () => void;
   lastGenerated?: Date;
   onExportImage?: () => void;
@@ -30,6 +31,7 @@ export default function MainCard({
   isHome = true,
   username,
   repo,
+  branch,
   onCopy,
   lastGenerated,
   onExportImage,
@@ -47,9 +49,10 @@ export default function MainCard({
 
   useEffect(() => {
     if (username && repo) {
-      setRepoUrl(`https://github.com/${username}/${repo}`);
+      const branchPath = branch ? `/tree/${branch}` : "";
+      setRepoUrl(`https://github.com/${username}/${repo}${branchPath}`);
     }
-  }, [username, repo]);
+  }, [username, repo, branch]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,10 +64,11 @@ export default function MainCard({
       return;
     }
 
-    const { username, repo } = parsed;
+    const { username, repo, branch } = parsed;
     const sanitizedUsername = encodeURIComponent(username);
     const sanitizedRepo = encodeURIComponent(repo);
-    router.push(`/${sanitizedUsername}/${sanitizedRepo}`);
+    const branchParam = branch ? `?branch=${encodeURIComponent(branch)}` : "";
+    router.push(`/${sanitizedUsername}/${sanitizedRepo}${branchParam}`);
   };
 
   const handleDropdownToggle = (dropdown: "export") => {

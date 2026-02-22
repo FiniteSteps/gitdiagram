@@ -57,4 +57,5 @@ export interface DiagramCostResponse {
 export interface StreamGenerationParams {
   username: string;
   repo: string;
+  branch?: string;
 }

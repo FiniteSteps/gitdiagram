@@ -5,13 +5,21 @@ import { eq, and } from "drizzle-orm";
 import { diagramCache } from "~/server/db/schema";
 import { sql } from "drizzle-orm";
 
-export async function getCachedDiagram(username: string, repo: string) {
+export async function getCachedDiagram(
+  username: string,
+  repo: string,
+  branch = "",
+) {
   try {
     const cached = await db
       .select()
       .from(diagramCache)
       .where(
-        and(eq(diagramCache.username, username), eq(diagramCache.repo, repo)),
+        and(
+          eq(diagramCache.username, username),
+          eq(diagramCache.repo, repo),
+          eq(diagramCache.branch, branch),
+        ),
       )
       .limit(1);
 
@@ -22,13 +30,21 @@ export async function getCachedDiagram(username: string, repo: string) {
   }
 }
 
-export async function getCachedExplanation(username: string, repo: string) {
+export async function getCachedExplanation(
+  username: string,
+  repo: string,
+  branch = "",
+) {
   try {
     const cached = await db
       .select()
       .from(diagramCache)
       .where(
-        and(eq(diagramCache.username, username), eq(diagramCache.repo, repo)),
+        and(
+          eq(diagramCache.username, username),
+          eq(diagramCache.repo, repo),
+          eq(diagramCache.branch, branch),
+        ),
       )
       .limit(1);
 
@@ -45,6 +61,7 @@ export async function cacheDiagramAndExplanation(
   diagram: string,
   explanation: string,
   usedOwnKey = false,
+  branch = "",
 ) {
   try {
     await db
@@ -52,12 +69,13 @@ export async function cacheDiagramAndExplanation(
       .values({
         username,
         repo,
+        branch,
         diagram,
         explanation,
         usedOwnKey,
       })
       .onConflictDoUpdate({
-        target: [diagramCache.username, diagramCache.repo],
+        target: [diagramCache.username, diagramCache.repo, diagramCache.branch],
         set: {
           diagram,
           explanation,

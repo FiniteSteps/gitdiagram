@@ -66,6 +66,7 @@ export async function streamDiagramGeneration(
     body: JSON.stringify({
       username: params.username,
       repo: params.repo,
+      ...(params.branch && { branch: params.branch }),
     }),
   });
 

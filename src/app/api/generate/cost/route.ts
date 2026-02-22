@@ -51,14 +51,14 @@ export async function POST(request: Request) {
       });
     }
 
-    const { username, repo } = parsed.data;
+    const { username, repo, branch } = parsed.data;
 
     // Resolve settings from admin DB config (never from client)
     const adminConfig = await getResolvedAdminConfig();
     const apiKey = adminConfig.apiKey;
     const azure = adminConfig.azure;
     const githubPat = adminConfig.githubPat;
-    const githubData = await getGithubData(username, repo, githubPat);
+    const githubData = await getGithubData(username, repo, githubPat, branch);
     const model = adminConfig.model || getModel();
 
     const baseInputTokens = await estimateRepoInputTokens(

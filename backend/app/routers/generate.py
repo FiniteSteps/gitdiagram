@@ -71,6 +71,7 @@ class GenerateRequest(BaseModel):
 
     username: str = Field(min_length=1, pattern=r"^[a-zA-Z0-9._-]+$")
     repo: str = Field(min_length=1, pattern=r"^[a-zA-Z0-9._-]+$")
+    branch: str | None = Field(default=None, min_length=1)
     api_key: str | None = Field(default=None, min_length=1)
     github_pat: str | None = Field(default=None, min_length=1)
     llm_config: ModelConfigPayload | None = Field(default=None, alias="model_config")
@@ -151,9 +152,9 @@ def _parse_request_payload(payload: Any) -> tuple[GenerateRequest | None, str | 
         return None, "Invalid request payload."
 
 
-async def _get_github_data(username: str, repo: str, github_pat: str | None):
+async def _get_github_data(username: str, repo: str, github_pat: str | None, branch: str | None = None):
     service = GitHubService(pat=github_pat) if github_pat else _default_github_service
-    return await service.get_github_data(username, repo)
+    return await service.get_github_data(username, repo, branch=branch)
 
 
 async def _estimate_repo_input_tokens(
@@ -195,7 +196,7 @@ async def get_generation_cost(request: Request):
                 status_code=400,
             )
 
-        github_data = await _get_github_data(parsed.username, parsed.repo, parsed.github_pat)
+        github_data = await _get_github_data(parsed.username, parsed.repo, parsed.github_pat, parsed.branch)
         api_key, azure, model_override = _resolve_from_model_config(parsed)
         model = model_override or get_model()
         base_input_tokens = await _estimate_repo_input_tokens(
@@ -283,7 +284,7 @@ async def generate_stream(request: Request):
             return _sse_message(payload)
 
         try:
-            github_data = await _get_github_data(parsed.username, parsed.repo, parsed.github_pat)
+            github_data = await _get_github_data(parsed.username, parsed.repo, parsed.github_pat, parsed.branch)
             api_key, azure, model_override = _resolve_from_model_config(parsed)
             model = model_override or get_model()
             token_count = await _estimate_repo_input_tokens(
