@@ -2,9 +2,11 @@ import { useState, useEffect, useCallback } from "react";
 
 import {
   cacheDiagramAndExplanation,
-  getCachedDiagram,
+  getLatestDiagramFromHistory,
+  getDiagramVersions,
+  getDiagramByVersion,
+  type DiagramVersion,
 } from "~/app/_actions/cache";
-import { getLastGeneratedDate } from "~/app/_actions/repo";
 import { getGenerationCost } from "~/features/diagram/api";
 import { useDiagramStream } from "~/hooks/diagram/useDiagramStream";
 import { useDiagramExport } from "~/hooks/diagram/useDiagramExport";
@@ -17,7 +19,21 @@ export function useDiagram(username: string, repo: string, branch?: string) {
   const [lastGenerated, setLastGenerated] = useState<Date | undefined>();
   const [cost, setCost] = useState<string>("");
 
+  // ── Version state ──────────────────────────────────────────────────
+  const [versions, setVersions] = useState<DiagramVersion[]>([]);
+  const [currentVersion, setCurrentVersion] = useState<number | null>(null);
+  const [totalVersions, setTotalVersions] = useState<number>(0);
+  const [versionLoading, setVersionLoading] = useState<boolean>(false);
+
   const branchKey = branch ?? "";
+
+  /** Refresh the version list from the DB */
+  const refreshVersions = useCallback(async () => {
+    const versionList = await getDiagramVersions(username, repo, branchKey);
+    setVersions(versionList);
+    setTotalVersions(versionList.length);
+    return versionList;
+  }, [username, repo, branchKey]);
 
   const onStreamComplete = useCallback(
     async ({
@@ -27,7 +43,7 @@ export function useDiagram(username: string, repo: string, branch?: string) {
       diagram: string;
       explanation: string;
     }) => {
-      await cacheDiagramAndExplanation(
+      const newVersion = await cacheDiagramAndExplanation(
         username,
         repo,
         nextDiagram,
@@ -37,11 +53,18 @@ export function useDiagram(username: string, repo: string, branch?: string) {
       );
 
       setDiagram(nextDiagram);
-      const date = await getLastGeneratedDate(username, repo, branchKey);
-      setLastGenerated(date ?? undefined);
+      setLastGenerated(new Date());
       setLoading(false);
+
+      // Refresh version list and set current to the new version
+      const versionList = await refreshVersions();
+      if (newVersion) {
+        setCurrentVersion(newVersion);
+      } else if (versionList.length > 0) {
+        setCurrentVersion(versionList[0]!.version);
+      }
     },
-    [branchKey, repo, username],
+    [branchKey, repo, username, refreshVersions],
   );
 
   const onStreamError = useCallback((message: string) => {
@@ -69,12 +92,28 @@ export function useDiagram(username: string, repo: string, branch?: string) {
     setCost("");
 
     try {
-      const cached = await getCachedDiagram(username, repo, branchKey);
+      // Try loading from versioned history first
+      const latest = await getLatestDiagramFromHistory(
+        username,
+        repo,
+        branchKey,
+      );
 
-      if (cached) {
-        setDiagram(cached);
-        const date = await getLastGeneratedDate(username, repo, branchKey);
-        setLastGenerated(date ?? undefined);
+      if (latest) {
+        setDiagram(latest.diagram);
+        setLastGenerated(latest.createdAt);
+        setCurrentVersion(latest.version);
+
+        // Load version list
+        const versionList = await getDiagramVersions(
+          username,
+          repo,
+          branchKey,
+        );
+        setVersions(versionList);
+        setTotalVersions(
+          versionList.length > 0 ? versionList.length : 1, // at least 1 for legacy fallback
+        );
         setLoading(false);
         return;
       }
@@ -127,6 +166,37 @@ export function useDiagram(username: string, repo: string, branch?: string) {
     }
   }, [repo, runGeneration, username]);
 
+  /** Switch to a specific historical version */
+  const selectVersion = useCallback(
+    async (version: number) => {
+      if (version === currentVersion) return;
+
+      setVersionLoading(true);
+      setError("");
+
+      try {
+        const row = await getDiagramByVersion(
+          username,
+          repo,
+          version,
+          branchKey,
+        );
+        if (row) {
+          setDiagram(row.diagram);
+          setCurrentVersion(row.version);
+          setLastGenerated(row.createdAt);
+        } else {
+          setError("Version not found.");
+        }
+      } catch {
+        setError("Failed to load version.");
+      } finally {
+        setVersionLoading(false);
+      }
+    },
+    [branchKey, currentVersion, repo, username],
+  );
+
   return {
     diagram,
     error,
@@ -137,5 +207,11 @@ export function useDiagram(username: string, repo: string, branch?: string) {
     handleExportImage,
     handleRegenerate,
     state,
+    // version data
+    versions,
+    currentVersion,
+    totalVersions,
+    versionLoading,
+    selectVersion,
   };
 }

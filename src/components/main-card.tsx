@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { Card } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Button } from "~/components/ui/button";
-import { Sparkles } from "lucide-react";
+import { Sparkles, ChevronUp, ChevronDown } from "lucide-react";
 import React from "react";
 import { isExampleRepo } from "~/lib/exampleRepos";
 import { ExportDropdown } from "./export-dropdown";
-import { ChevronUp, ChevronDown } from "lucide-react";
+import { VersionSelector } from "./version-selector";
 import { Switch } from "~/components/ui/switch";
 import { parseGitHubRepoUrl } from "~/features/diagram/github-url";
+import type { DiagramVersion } from "~/app/_actions/cache";
 
 interface MainCardProps {
   isHome?: boolean;
@@ -25,6 +26,12 @@ interface MainCardProps {
   zoomingEnabled?: boolean;
   onZoomToggle?: () => void;
   loading?: boolean;
+  // Version history
+  versions?: DiagramVersion[];
+  currentVersion?: number | null;
+  totalVersions?: number;
+  versionLoading?: boolean;
+  onSelectVersion?: (version: number) => void;
 }
 
 export default function MainCard({
@@ -39,6 +46,11 @@ export default function MainCard({
   zoomingEnabled,
   onZoomToggle,
   loading,
+  versions,
+  currentVersion,
+  totalVersions,
+  versionLoading,
+  onSelectVersion,
 }: MainCardProps) {
   const [repoUrl, setRepoUrl] = useState("");
   const [error, setError] = useState("");
@@ -150,6 +162,17 @@ export default function MainCard({
                       </button>
                     </div>
                   )}
+                  {/* Version selector */}
+                  {versions && currentVersion != null && totalVersions != null && totalVersions > 0 && onSelectVersion && (
+                    <VersionSelector
+                      versions={versions}
+                      currentVersion={currentVersion}
+                      totalVersions={totalVersions}
+                      loading={versionLoading ?? false}
+                      onSelectVersion={onSelectVersion}
+                    />
+                  )}
+
                   {lastGenerated && (
                     <>
                       <label

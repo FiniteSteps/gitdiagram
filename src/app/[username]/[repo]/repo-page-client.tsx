@@ -31,6 +31,11 @@ export default function RepoPageClient({ username, repo, branch }: RepoPageClien
     handleExportImage,
     handleRegenerate,
     state,
+    versions,
+    currentVersion,
+    totalVersions,
+    versionLoading,
+    selectVersion,
   } = useDiagram(normalizedUsername, normalizedRepo, branch);
 
   return (
@@ -48,6 +53,11 @@ export default function RepoPageClient({ username, repo, branch }: RepoPageClien
           zoomingEnabled={zoomingEnabled}
           onZoomToggle={() => setZoomingEnabled((prev) => !prev)}
           loading={loading}
+          versions={versions}
+          currentVersion={currentVersion}
+          totalVersions={totalVersions}
+          versionLoading={versionLoading}
+          onSelectVersion={selectVersion}
         />
       </div>
       <div className="mt-8 flex w-full flex-col items-center gap-8">

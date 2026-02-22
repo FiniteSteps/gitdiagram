@@ -10,6 +10,8 @@ import {
   boolean,
   text,
   serial,
+  integer,
+  index,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -40,6 +42,39 @@ export const diagramCache = createTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.username, table.repo, table.branch] }),
+  }),
+);
+
+// ── Diagram version history ─────────────────────────────────────────
+export const diagramHistory = createTable(
+  "diagram_history",
+  {
+    id: serial("id").primaryKey(),
+    username: varchar("username", { length: 256 }).notNull(),
+    repo: varchar("repo", { length: 256 }).notNull(),
+    branch: varchar("branch", { length: 512 }).notNull().default(""),
+    version: integer("version").notNull().default(1),
+    diagram: text("diagram").notNull(),
+    explanation: text("explanation")
+      .notNull()
+      .default("No explanation provided"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .default(sql`CURRENT_TIMESTAMP`)
+      .notNull(),
+    usedOwnKey: boolean("used_own_key").default(false),
+  },
+  (table) => ({
+    repoIdx: index("diagram_history_repo_idx").on(
+      table.username,
+      table.repo,
+      table.branch,
+    ),
+    versionIdx: index("diagram_history_version_idx").on(
+      table.username,
+      table.repo,
+      table.branch,
+      table.version,
+    ),
   }),
 );
 
