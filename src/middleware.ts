@@ -15,8 +15,8 @@ import { type NextRequest, NextResponse } from "next/server";
 export function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;
 
-  // Only gate /admin routes
-  if (!pathname.startsWith("/admin")) {
+  // Gate /admin pages and /api/admin/* routes
+  if (!pathname.startsWith("/admin") && !pathname.startsWith("/api/admin")) {
     return NextResponse.next();
   }
 
@@ -64,5 +64,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: ["/admin/:path*", "/api/admin/:path*"],
 };

@@ -9,6 +9,7 @@ import {
   primaryKey,
   boolean,
   text,
+  serial,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -56,4 +57,15 @@ export const adminSettings = createTable("admin_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
     () => new Date(),
   ),
+});
+
+// ── Admin audit log ─────────────────────────────────────────────────
+export const adminAuditLog = createTable("admin_audit_log", {
+  id: serial("id").primaryKey(),
+  action: varchar("action", { length: 64 }).notNull(), // e.g. "settings_update"
+  changedFields: text("changed_fields"), // JSON string of field names that changed
+  details: text("details"), // optional human-readable summary
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .default(sql`CURRENT_TIMESTAMP`)
+    .notNull(),
 });
