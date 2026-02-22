@@ -15,6 +15,24 @@ vi.mock("~/features/diagram/api", () => ({
   }),
 }));
 
+vi.mock("~/components/model-config-dialog", () => ({
+  getModelConfig: vi.fn(() => undefined),
+}));
+
+// Ensure localStorage is available in test env
+const localStorageMock = {
+  getItem: vi.fn(() => null),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+  length: 0,
+  key: vi.fn(() => null),
+};
+Object.defineProperty(globalThis, "localStorage", {
+  value: localStorageMock,
+  writable: true,
+});
+
 describe("useDiagramStream", () => {
   it("updates state through stream lifecycle", async () => {
     const onComplete = vi.fn(async () => undefined);

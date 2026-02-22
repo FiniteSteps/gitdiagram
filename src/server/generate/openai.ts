@@ -1,6 +1,12 @@
-import OpenAI from "openai";
+import OpenAI, { AzureOpenAI } from "openai";
 
 export type ReasoningEffort = "low" | "medium" | "high";
+
+export interface AzureOpenAIOptions {
+  endpoint: string;
+  deployment: string;
+  apiVersion: string;
+}
 
 function resolveApiKey(overrideApiKey?: string): string {
   const apiKey = overrideApiKey?.trim() || process.env.OPENAI_API_KEY?.trim();
@@ -10,6 +16,22 @@ function resolveApiKey(overrideApiKey?: string): string {
     );
   }
   return apiKey;
+}
+
+function createClient(apiKey: string, azure?: AzureOpenAIOptions): OpenAI {
+  if (azure) {
+    return new AzureOpenAI({
+      apiKey,
+      endpoint: azure.endpoint,
+      apiVersion: azure.apiVersion,
+      deployment: azure.deployment,
+    });
+  }
+  return new OpenAI({ apiKey });
+}
+
+function resolveModel(model: string, azure?: AzureOpenAIOptions): string {
+  return azure ? azure.deployment : model;
 }
 
 export function estimateTokens(text: string): number {
@@ -24,6 +46,7 @@ interface StreamCompletionParams {
   apiKey?: string;
   reasoningEffort?: ReasoningEffort;
   maxOutputTokens?: number;
+  azure?: AzureOpenAIOptions;
 }
 
 export async function* streamCompletion({
@@ -33,11 +56,13 @@ export async function* streamCompletion({
   apiKey,
   reasoningEffort,
   maxOutputTokens,
+  azure,
 }: StreamCompletionParams): AsyncGenerator<string, void, void> {
-  const client = new OpenAI({ apiKey: resolveApiKey(apiKey) });
+  const client = createClient(resolveApiKey(apiKey), azure);
+  const resolvedModel = resolveModel(model, azure);
 
   const stream = await client.responses.create({
-    model,
+    model: resolvedModel,
     stream: true,
     input: [
       { role: "system", content: systemPrompt },
@@ -68,6 +93,7 @@ interface CountInputTokensParams {
   userPrompt: string;
   apiKey?: string;
   reasoningEffort?: ReasoningEffort;
+  azure?: AzureOpenAIOptions;
 }
 
 export async function countInputTokens({
@@ -76,11 +102,13 @@ export async function countInputTokens({
   userPrompt,
   apiKey,
   reasoningEffort,
+  azure,
 }: CountInputTokensParams): Promise<number> {
-  const client = new OpenAI({ apiKey: resolveApiKey(apiKey) });
+  const client = createClient(resolveApiKey(apiKey), azure);
+  const resolvedModel = resolveModel(model, azure);
 
   const response = await client.responses.inputTokens.count({
-    model,
+    model: resolvedModel,
     input: [
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },

@@ -3,10 +3,10 @@ import { NextResponse } from "next/server";
 import { toTaggedMessage } from "~/server/generate/format";
 import { getGithubData } from "~/server/generate/github";
 import { getModel } from "~/server/generate/model-config";
-import { countInputTokens, estimateTokens } from "~/server/generate/openai";
+import { countInputTokens, estimateTokens, type AzureOpenAIOptions } from "~/server/generate/openai";
 import { SYSTEM_FIRST_PROMPT } from "~/server/generate/prompts";
 import { estimateTextTokenCostUsd } from "~/server/generate/pricing";
-import { generateRequestSchema } from "~/server/generate/types";
+import { generateRequestSchema, type ModelConfigPayload } from "~/server/generate/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,11 +15,33 @@ const MULTI_STAGE_INPUT_MULTIPLIER = 2;
 const INPUT_OVERHEAD_TOKENS = 3000;
 const ESTIMATED_OUTPUT_TOKENS = 8000;
 
+function resolveModelConfig(mc?: ModelConfigPayload): {
+  apiKey?: string;
+  azure?: AzureOpenAIOptions;
+  modelOverride?: string;
+} {
+  if (!mc) return {};
+  const azure: AzureOpenAIOptions | undefined =
+    mc.provider === "azure_openai" && mc.azure
+      ? {
+          endpoint: mc.azure.endpoint,
+          deployment: mc.azure.deployment,
+          apiVersion: mc.azure.api_version,
+        }
+      : undefined;
+  return {
+    apiKey: mc.api_key ?? undefined,
+    azure,
+    modelOverride: mc.model_name ?? undefined,
+  };
+}
+
 async function estimateRepoInputTokens(
   model: string,
   fileTree: string,
   readme: string,
   apiKey?: string,
+  azure?: AzureOpenAIOptions,
 ) {
   try {
     return await countInputTokens({
@@ -31,6 +53,7 @@ async function estimateRepoInputTokens(
       }),
       apiKey,
       reasoningEffort: "medium",
+      azure,
     });
   } catch {
     return estimateTokens(`${fileTree}\n${readme}`);
@@ -51,17 +74,21 @@ export async function POST(request: Request) {
     const {
       username,
       repo,
-      api_key: apiKey,
+      api_key: rawApiKey,
       github_pat: githubPat,
+      model_config: modelConfigPayload,
     } = parsed.data;
+    const { apiKey: mcApiKey, azure, modelOverride } = resolveModelConfig(modelConfigPayload);
+    const apiKey = mcApiKey ?? rawApiKey;
     const githubData = await getGithubData(username, repo, githubPat);
-    const model = getModel();
+    const model = modelOverride || getModel();
 
     const baseInputTokens = await estimateRepoInputTokens(
       model,
       githubData.fileTree,
       githubData.readme,
       apiKey,
+      azure,
     );
     const estimatedInputTokens =
       baseInputTokens * MULTI_STAGE_INPUT_MULTIPLIER + INPUT_OVERHEAD_TOKENS;

@@ -5,13 +5,22 @@ import math
 import os
 
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 
 from app.utils.format_message import format_user_message
 
 load_dotenv()
 
 ReasoningEffort = Literal["low", "medium", "high"]
+
+
+class AzureConfig:
+    """Azure OpenAI connection settings supplied by the end-user."""
+
+    def __init__(self, endpoint: str, deployment: str, api_version: str):
+        self.endpoint = endpoint
+        self.deployment = deployment
+        self.api_version = api_version
 
 
 class OpenAIService:
@@ -39,13 +48,30 @@ class OpenAIService:
         ]
 
     @staticmethod
-    def _create_client(api_key: str) -> AsyncOpenAI:
-        # Keep explicit config local to this service.
+    def _create_client(
+        api_key: str,
+        azure: AzureConfig | None = None,
+    ) -> AsyncOpenAI | AsyncAzureOpenAI:
+        if azure:
+            return AsyncAzureOpenAI(
+                api_key=api_key,
+                azure_endpoint=azure.endpoint,
+                api_version=azure.api_version,
+                max_retries=2,
+                timeout=600,
+            )
         return AsyncOpenAI(
             api_key=api_key,
             max_retries=2,
             timeout=600,
         )
+
+    @staticmethod
+    def _resolve_model(model: str, azure: AzureConfig | None = None) -> str:
+        """For Azure the 'model' parameter must be the deployment name."""
+        if azure:
+            return azure.deployment
+        return model
 
     async def stream_completion(
         self,
@@ -56,11 +82,13 @@ class OpenAIService:
         api_key: str | None = None,
         reasoning_effort: ReasoningEffort | None = None,
         max_output_tokens: int | None = None,
+        azure: AzureConfig | None = None,
     ) -> AsyncGenerator[str, None]:
         user_prompt = format_user_message(data)
         resolved_api_key = self._resolve_api_key(api_key)
+        resolved_model = self._resolve_model(model, azure)
         payload: dict = {
-            "model": model,
+            "model": resolved_model,
             "stream": True,
             "input": self._build_input(system_prompt, user_prompt),
         }
@@ -69,7 +97,7 @@ class OpenAIService:
         if max_output_tokens:
             payload["max_output_tokens"] = max_output_tokens
 
-        client = self._create_client(resolved_api_key)
+        client = self._create_client(resolved_api_key, azure)
         stream = await client.responses.create(**payload)
         try:
             async for event in stream:
@@ -94,17 +122,19 @@ class OpenAIService:
         data: dict[str, str | None],
         api_key: str | None = None,
         reasoning_effort: ReasoningEffort | None = None,
+        azure: AzureConfig | None = None,
     ) -> int:
         user_prompt = format_user_message(data)
         resolved_api_key = self._resolve_api_key(api_key)
+        resolved_model = self._resolve_model(model, azure)
         payload: dict = {
-            "model": model,
+            "model": resolved_model,
             "input": self._build_input(system_prompt, user_prompt),
         }
         if reasoning_effort:
             payload["reasoning"] = {"effort": reasoning_effort}
 
-        client = self._create_client(resolved_api_key)
+        client = self._create_client(resolved_api_key, azure)
         try:
             response = await client.responses.input_tokens.count(**payload)
             input_tokens = getattr(response, "input_tokens", None)

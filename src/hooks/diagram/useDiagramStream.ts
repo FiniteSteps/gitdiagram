@@ -4,7 +4,9 @@ import { streamDiagramGeneration } from "~/features/diagram/api";
 import type {
   DiagramStreamMessage,
   DiagramStreamState,
+  ModelConfig,
 } from "~/features/diagram/types";
+import { getModelConfig } from "~/components/model-config-dialog";
 
 interface UseDiagramStreamOptions {
   username: string;
@@ -144,12 +146,21 @@ export function useDiagramStream({
         fixDiagramDraft: "",
       };
 
+      const modelConfig: ModelConfig | undefined = getModelConfig();
+      // Prefer api key from model config, fall back to legacy localStorage key
+      const apiKey =
+        modelConfig?.apiKey ??
+        (typeof globalThis.localStorage !== "undefined"
+          ? localStorage.getItem("openai_key") ?? undefined
+          : undefined);
+
       await streamDiagramGeneration(
         {
           username,
           repo,
-          apiKey: localStorage.getItem("openai_key") ?? undefined,
+          apiKey,
           githubPat,
+          modelConfig,
         },
         {
           onMessage: (message) => handleStreamMessage(message, buffers),

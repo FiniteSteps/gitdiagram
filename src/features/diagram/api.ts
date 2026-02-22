@@ -2,8 +2,26 @@ import { parseSSEStreamBuffer } from "~/features/diagram/sse";
 import type {
   DiagramCostResponse,
   DiagramStreamMessage,
+  ModelConfig,
   StreamGenerationParams,
 } from "~/features/diagram/types";
+
+function modelConfigToPayload(config?: ModelConfig) {
+  if (!config) return undefined;
+  return {
+    provider: config.provider,
+    model_name: config.modelName,
+    api_key: config.apiKey,
+    azure:
+      config.provider === "azure_openai" && config.azure
+        ? {
+            endpoint: config.azure.endpoint,
+            deployment: config.azure.deployment,
+            api_version: config.azure.apiVersion,
+          }
+        : undefined,
+  };
+}
 
 interface StreamHandlers {
   onMessage: (
@@ -30,6 +48,7 @@ export async function getGenerationCost(
   repo: string,
   githubPat?: string,
   apiKey?: string,
+  modelConfig?: ModelConfig,
 ): Promise<DiagramCostResponse> {
   try {
     const response = await fetch(`${getGenerateBasePath()}/cost`, {
@@ -42,6 +61,7 @@ export async function getGenerationCost(
         repo,
         api_key: apiKey,
         github_pat: githubPat,
+        model_config: modelConfigToPayload(modelConfig),
       }),
     });
 
@@ -75,6 +95,7 @@ export async function streamDiagramGeneration(
       repo: params.repo,
       api_key: params.apiKey,
       github_pat: params.githubPat,
+      model_config: modelConfigToPayload(params.modelConfig),
     }),
   });
 

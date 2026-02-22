@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.observability import Timer, log_event
 from app.prompts import (
@@ -19,7 +19,7 @@ from app.prompts import (
 from app.services.github_service import GitHubService
 from app.services.mermaid_service import format_validation_feedback, validate_mermaid_syntax
 from app.services.model_config import get_model
-from app.services.openai_service import OpenAIService
+from app.services.openai_service import AzureConfig, OpenAIService
 from app.services.pricing import estimate_text_token_cost_usd
 
 router = APIRouter(prefix="/generate", tags=["OpenAI"])
@@ -32,11 +32,49 @@ INPUT_OVERHEAD_TOKENS = 3000
 ESTIMATED_OUTPUT_TOKENS = 8000
 
 
+class AzureOpenAIConfigPayload(BaseModel):
+    endpoint: str = Field(min_length=1)
+    deployment: str = Field(min_length=1)
+    api_version: str = Field(min_length=1)
+
+
+class ModelConfigPayload(BaseModel):
+    provider: str = Field(default="openai")       # "openai" | "azure_openai"
+    model_name: str | None = Field(default=None)
+    api_key: str | None = Field(default=None, min_length=1)
+    azure: AzureOpenAIConfigPayload | None = None
+
+
 class GenerateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     username: str = Field(min_length=1)
     repo: str = Field(min_length=1)
     api_key: str | None = Field(default=None, min_length=1)
     github_pat: str | None = Field(default=None, min_length=1)
+    llm_config: ModelConfigPayload | None = Field(default=None, alias="model_config")
+
+
+def _resolve_from_model_config(
+    parsed: GenerateRequest,
+) -> tuple[str | None, AzureConfig | None, str | None]:
+    """Return (api_key, azure_config, model_override) from request payload."""
+    mc = parsed.llm_config
+    if not mc:
+        return parsed.api_key, None, None
+
+    api_key = mc.api_key or parsed.api_key
+    model_override = mc.model_name or None
+    azure: AzureConfig | None = None
+
+    if mc.provider == "azure_openai" and mc.azure:
+        azure = AzureConfig(
+            endpoint=mc.azure.endpoint,
+            deployment=mc.azure.deployment,
+            api_version=mc.azure.api_version,
+        )
+
+    return api_key, azure, model_override
 
 
 def _sse_message(payload: dict[str, Any]) -> str:
@@ -45,6 +83,16 @@ def _sse_message(payload: dict[str, Any]) -> str:
 
 def _strip_mermaid_code_fences(text: str) -> str:
     return text.replace("```mermaid", "").replace("```", "").strip()
+
+
+def _resolve_reasoning_effort(
+    effort: str, azure: AzureConfig | None
+) -> str:
+    """Azure models may not support all reasoning-effort levels (e.g. 'low').
+    Clamp unsupported values to 'medium' when targeting Azure OpenAI."""
+    if azure and effort == "low":
+        return "medium"
+    return effort
 
 
 def _extract_component_mapping(response: str) -> str:
@@ -89,6 +137,7 @@ async def _estimate_repo_input_tokens(
     file_tree: str,
     readme: str,
     api_key: str | None = None,
+    azure: AzureConfig | None = None,
 ) -> int:
     try:
         return await openai_service.count_input_tokens(
@@ -100,6 +149,7 @@ async def _estimate_repo_input_tokens(
             },
             api_key=api_key,
             reasoning_effort="medium",
+            azure=azure,
         )
     except Exception:
         return openai_service.estimate_tokens(f"{file_tree}\n{readme}")
@@ -121,12 +171,14 @@ async def get_generation_cost(request: Request):
             )
 
         github_data = _get_github_data(parsed.username, parsed.repo, parsed.github_pat)
-        model = get_model()
+        api_key, azure, model_override = _resolve_from_model_config(parsed)
+        model = model_override or get_model()
         base_input_tokens = await _estimate_repo_input_tokens(
             model=model,
             file_tree=github_data.file_tree,
             readme=github_data.readme,
-            api_key=parsed.api_key,
+            api_key=api_key,
+            azure=azure,
         )
         estimated_input_tokens = (
             base_input_tokens * MULTI_STAGE_INPUT_MULTIPLIER + INPUT_OVERHEAD_TOKENS
@@ -206,12 +258,14 @@ async def generate_stream(request: Request):
 
         try:
             github_data = _get_github_data(parsed.username, parsed.repo, parsed.github_pat)
-            model = get_model()
+            api_key, azure, model_override = _resolve_from_model_config(parsed)
+            model = model_override or get_model()
             token_count = await _estimate_repo_input_tokens(
                 model=model,
                 file_tree=github_data.file_tree,
                 readme=github_data.readme,
-                api_key=parsed.api_key,
+                api_key=api_key,
+                azure=azure,
             )
 
             yield send(
@@ -221,7 +275,7 @@ async def generate_stream(request: Request):
                 }
             )
 
-            if token_count > 50000 and token_count < 195000 and not parsed.api_key:
+            if token_count > 50000 and token_count < 195000 and not api_key:
                 yield send(
                     {
                         "status": "error",
@@ -263,8 +317,9 @@ async def generate_stream(request: Request):
                     "file_tree": github_data.file_tree,
                     "readme": github_data.readme,
                 },
-                api_key=parsed.api_key,
+                api_key=api_key,
                 reasoning_effort="medium",
+                azure=azure,
             ):
                 explanation += chunk
                 yield send({"status": "explanation_chunk", "chunk": chunk})
@@ -291,8 +346,9 @@ async def generate_stream(request: Request):
                     "explanation": explanation,
                     "file_tree": github_data.file_tree,
                 },
-                api_key=parsed.api_key,
-                reasoning_effort="low",
+                api_key=api_key,
+                reasoning_effort=_resolve_reasoning_effort("low", azure),
+                azure=azure,
             ):
                 full_mapping_response += chunk
                 yield send({"status": "mapping_chunk", "chunk": chunk})
@@ -321,8 +377,9 @@ async def generate_stream(request: Request):
                     "explanation": explanation,
                     "component_mapping": component_mapping,
                 },
-                api_key=parsed.api_key,
-                reasoning_effort="low",
+                api_key=api_key,
+                reasoning_effort=_resolve_reasoning_effort("low", azure),
+                azure=azure,
             ):
                 mermaid_code += chunk
                 yield send({"status": "diagram_chunk", "chunk": chunk})
@@ -367,8 +424,9 @@ async def generate_stream(request: Request):
                         "explanation": explanation,
                         "component_mapping": component_mapping,
                     },
-                    api_key=parsed.api_key,
-                    reasoning_effort="low",
+                    api_key=api_key,
+                    reasoning_effort=_resolve_reasoning_effort("low", azure),
+                    azure=azure,
                 ):
                     repaired_diagram += chunk
                     yield send(

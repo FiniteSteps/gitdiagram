@@ -52,9 +52,29 @@ export interface DiagramCostResponse {
   ok?: boolean;
 }
 
+// ── LLM provider configuration (persisted in localStorage) ──────────
+
+export type LLMProvider = "openai" | "azure_openai";
+
+export interface AzureOpenAIConfig {
+  endpoint: string;      // e.g. "https://my-resource.openai.azure.com/"
+  deployment: string;    // e.g. "gpt-5.2-chat"
+  apiVersion: string;    // e.g. "2025-04-01-preview"
+}
+
+export interface ModelConfig {
+  provider: LLMProvider;
+  modelName?: string;              // user-chosen model name (shown in UI)
+  apiKey?: string;                 // OpenAI or Azure subscription key
+  azure?: AzureOpenAIConfig;       // only when provider === "azure_openai"
+}
+
+// ── Stream generation request ───────────────────────────────────────
+
 export interface StreamGenerationParams {
   username: string;
   repo: string;
   apiKey?: string;
   githubPat?: string;
+  modelConfig?: ModelConfig;
 }

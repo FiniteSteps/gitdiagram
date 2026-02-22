@@ -14,6 +14,7 @@ import {
   countInputTokens,
   estimateTokens,
   streamCompletion,
+  type AzureOpenAIOptions,
 } from "~/server/generate/openai";
 import {
   SYSTEM_FIRST_PROMPT,
@@ -21,15 +22,46 @@ import {
   SYSTEM_SECOND_PROMPT,
   SYSTEM_THIRD_PROMPT,
 } from "~/server/generate/prompts";
-import { generateRequestSchema, sseMessage } from "~/server/generate/types";
+import { generateRequestSchema, type ModelConfigPayload, sseMessage } from "~/server/generate/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 const MAX_MERMAID_FIX_ATTEMPTS = 3;
 
+/** Azure models may not support all reasoning-effort levels (e.g. "low").
+ *  Clamp unsupported values to "medium" when targeting Azure OpenAI. */
+function resolveReasoningEffort(
+  effort: "low" | "medium" | "high",
+  azure?: AzureOpenAIOptions,
+): "low" | "medium" | "high" {
+  if (azure && effort === "low") return "medium";
+  return effort;
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function resolveModelConfig(mc?: ModelConfigPayload): {
+  apiKey?: string;
+  azure?: AzureOpenAIOptions;
+  modelOverride?: string;
+} {
+  if (!mc) return {};
+  const azure: AzureOpenAIOptions | undefined =
+    mc.provider === "azure_openai" && mc.azure
+      ? {
+          endpoint: mc.azure.endpoint,
+          deployment: mc.azure.deployment,
+          apiVersion: mc.azure.api_version,
+        }
+      : undefined;
+  return {
+    apiKey: mc.api_key ?? undefined,
+    azure,
+    modelOverride: mc.model_name ?? undefined,
+  };
 }
 
 async function estimateRepoTokenCount(
@@ -37,6 +69,7 @@ async function estimateRepoTokenCount(
   fileTree: string,
   readme: string,
   apiKey?: string,
+  azure?: AzureOpenAIOptions,
 ) {
   try {
     return await countInputTokens({
@@ -48,6 +81,7 @@ async function estimateRepoTokenCount(
       }),
       apiKey,
       reasoningEffort: "medium",
+      azure,
     });
   } catch {
     return estimateTokens(`${fileTree}\n${readme}`);
@@ -68,7 +102,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const { username, repo, api_key: apiKey, github_pat: githubPat } = parsed.data;
+  const { username, repo, api_key: rawApiKey, github_pat: githubPat, model_config: modelConfigPayload } = parsed.data;
+  const { apiKey: mcApiKey, azure, modelOverride } = resolveModelConfig(modelConfigPayload);
+  const apiKey = mcApiKey ?? rawApiKey;
 
   const encoder = new TextEncoder();
 
@@ -81,12 +117,13 @@ export async function POST(request: Request) {
       const run = async () => {
         try {
           const githubData = await getGithubData(username, repo, githubPat);
-          const model = getModel();
+          const model = modelOverride || getModel();
           const tokenCount = await estimateRepoTokenCount(
             model,
             githubData.fileTree,
             githubData.readme,
             apiKey,
+            azure,
           );
 
           send({
@@ -136,6 +173,7 @@ export async function POST(request: Request) {
             }),
             apiKey,
             reasoningEffort: "medium",
+            azure,
           })) {
             explanation += chunk;
             send({ status: "explanation_chunk", chunk });
@@ -160,7 +198,8 @@ export async function POST(request: Request) {
               file_tree: githubData.fileTree,
             }),
             apiKey,
-            reasoningEffort: "low",
+            reasoningEffort: resolveReasoningEffort("low", azure),
+            azure,
           })) {
             fullMappingResponse += chunk;
             send({ status: "mapping_chunk", chunk });
@@ -187,7 +226,8 @@ export async function POST(request: Request) {
               component_mapping: componentMapping,
             }),
             apiKey,
-            reasoningEffort: "low",
+            reasoningEffort: resolveReasoningEffort("low", azure),
+            azure,
           })) {
             mermaidCode += chunk;
             send({ status: "diagram_chunk", chunk });
@@ -232,7 +272,8 @@ export async function POST(request: Request) {
                 component_mapping: componentMapping,
               }),
               apiKey,
-              reasoningEffort: "low",
+              reasoningEffort: resolveReasoningEffort("low", azure),
+              azure,
             })) {
               repairedDiagram += chunk;
               send({

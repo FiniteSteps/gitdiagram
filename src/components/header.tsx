@@ -6,12 +6,15 @@ import { FaGithub } from "react-icons/fa";
 import { getStarCount } from "~/app/_actions/github";
 import { PrivateReposDialog } from "./private-repos-dialog";
 import { ApiKeyDialog } from "./api-key-dialog";
+import { ModelConfigDialog } from "./model-config-dialog";
 import { ThemeToggle } from "./theme-toggle";
+import type { ModelConfig } from "~/features/diagram/types";
 
 export function Header() {
   const [isPrivateReposDialogOpen, setIsPrivateReposDialogOpen] =
     useState(false);
   const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
+  const [isModelConfigDialogOpen, setIsModelConfigDialogOpen] = useState(false);
   const [starCount, setStarCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -37,6 +40,10 @@ export function Header() {
     setIsApiKeyDialogOpen(false);
   };
 
+  const handleModelConfigSubmit = (_config: ModelConfig) => {
+    setIsModelConfigDialogOpen(false);
+  };
+
   return (
     <header className="border-b-[3px] border-black dark:border-black">
       <div className="mx-auto flex h-16 max-w-4xl items-center justify-between px-4 sm:px-8">
@@ -51,6 +58,14 @@ export function Header() {
           </span>
         </Link>
         <nav className="flex items-center gap-3 sm:gap-6">
+          <button
+            type="button"
+            onClick={() => setIsModelConfigDialogOpen(true)}
+            className="text-sm font-medium text-black transition-transform hover:translate-y-[-2px] hover:text-purple-600 dark:text-neutral-200 dark:hover:text-[hsl(var(--neo-link-hover))]"
+          >
+            <span className="sm:hidden">Models</span>
+            <span className="hidden sm:inline">Manage Models</span>
+          </button>
           <button
             type="button"
             onClick={() => setIsApiKeyDialogOpen(true)}
@@ -94,6 +109,11 @@ export function Header() {
           isOpen={isApiKeyDialogOpen}
           onClose={() => setIsApiKeyDialogOpen(false)}
           onSubmit={handleApiKeySubmit}
+        />
+        <ModelConfigDialog
+          isOpen={isModelConfigDialogOpen}
+          onClose={() => setIsModelConfigDialogOpen(false)}
+          onSubmit={handleModelConfigSubmit}
         />
       </div>
     </header>

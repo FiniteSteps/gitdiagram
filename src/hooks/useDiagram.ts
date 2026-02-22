@@ -10,6 +10,7 @@ import { type DiagramStreamState } from "~/features/diagram/types";
 import { useDiagramStream } from "~/hooks/diagram/useDiagramStream";
 import { useDiagramExport } from "~/hooks/diagram/useDiagramExport";
 import { isExampleRepo } from "~/lib/exampleRepos";
+import { getModelConfig } from "~/components/model-config-dialog";
 
 export function useDiagram(username: string, repo: string) {
   const [diagram, setDiagram] = useState<string>("");
@@ -18,6 +19,7 @@ export function useDiagram(username: string, repo: string) {
   const [lastGenerated, setLastGenerated] = useState<Date | undefined>();
   const [cost, setCost] = useState<string>("");
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
+  const [showModelConfigDialog, setShowModelConfigDialog] = useState(false);
   const [hasUsedFreeGeneration, setHasUsedFreeGeneration] = useState<boolean>(
     () => {
       if (typeof window === "undefined") return false;
@@ -95,40 +97,7 @@ export function useDiagram(username: string, repo: string) {
         repo,
         githubPat ?? undefined,
         apiKey ?? undefined,
-      );
-
-      if (costEstimate.error) {
-        setError(costEstimate.error);
-        setLoading(false);
-        return;
-      }
-
-      setCost(costEstimate.cost ?? "");
-      await runGeneration(githubPat ?? undefined);
-    } catch {
-      setError("Something went wrong. Please try again later.");
-      setLoading(false);
-    }
-  }, [repo, runGeneration, username]);
-
-  const handleRegenerate = useCallback(async () => {
-    if (isExampleRepo(username, repo)) {
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-    setCost("");
-
-    const githubPat = localStorage.getItem("github_pat");
-    const apiKey = localStorage.getItem("openai_key");
-
-    try {
-      const costEstimate = await getGenerationCost(
-        username,
-        repo,
-        githubPat ?? undefined,
-        apiKey ?? undefined,
+        getModelConfig(),
       );
 
       if (costEstimate.error) {
@@ -150,6 +119,41 @@ export function useDiagram(username: string, repo: string) {
   }, [getDiagram]);
 
   const { handleCopy, handleExportImage } = useDiagramExport(diagram);
+
+  const handleRegenerate = useCallback(async () => {
+    if (isExampleRepo(username, repo)) {
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+    setCost("");
+
+    const githubPat = localStorage.getItem("github_pat");
+    const apiKey = localStorage.getItem("openai_key");
+
+    try {
+      const costEstimate = await getGenerationCost(
+        username,
+        repo,
+        githubPat ?? undefined,
+        apiKey ?? undefined,
+        getModelConfig(),
+      );
+
+      if (costEstimate.error) {
+        setError(costEstimate.error);
+        setLoading(false);
+        return;
+      }
+
+      setCost(costEstimate.cost ?? "");
+      await runGeneration(githubPat ?? undefined);
+    } catch {
+      setError("Something went wrong. Please try again later.");
+      setLoading(false);
+    }
+  }, [repo, runGeneration, username]);
 
   const handleApiKeySubmit = async (apiKey: string) => {
     setShowApiKeyDialog(false);
@@ -175,6 +179,19 @@ export function useDiagram(username: string, repo: string) {
     setShowApiKeyDialog(true);
   };
 
+  const handleOpenModelConfigDialog = () => {
+    setShowModelConfigDialog(true);
+  };
+
+  const handleCloseModelConfigDialog = () => {
+    setShowModelConfigDialog(false);
+  };
+
+  const handleModelConfigSubmit = async () => {
+    setShowModelConfigDialog(false);
+    // If there's a diagram already, no auto-regenerate; user can click Regenerate
+  };
+
   return {
     diagram,
     error,
@@ -186,6 +203,10 @@ export function useDiagram(username: string, repo: string) {
     handleApiKeySubmit,
     handleCloseApiKeyDialog,
     handleOpenApiKeyDialog,
+    showModelConfigDialog,
+    handleOpenModelConfigDialog,
+    handleCloseModelConfigDialog,
+    handleModelConfigSubmit,
     handleExportImage,
     handleRegenerate,
     state: state as DiagramStreamState,

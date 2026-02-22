@@ -28,7 +28,7 @@ def test_generate_cost_success(monkeypatch):
     )
     monkeypatch.setattr(generate, "get_model", lambda: "gpt-5.2")
 
-    async def fake_count_input_tokens(*, model, system_prompt, data, api_key=None, reasoning_effort=None):
+    async def fake_count_input_tokens(*, model, system_prompt, data, api_key=None, reasoning_effort=None, azure=None):
         return 100
 
     monkeypatch.setattr(generate.openai_service, "count_input_tokens", fake_count_input_tokens)
@@ -77,10 +77,10 @@ def test_generate_stream_event_order_with_fix_loop(monkeypatch):
     )
     monkeypatch.setattr(generate, "get_model", lambda: "gpt-5.2")
 
-    async def fake_estimate_repo_input_tokens(model, file_tree, readme, api_key=None):
+    async def fake_estimate_repo_input_tokens(model, file_tree, readme, api_key=None, azure=None):
         return 1000
 
-    async def fake_stream_completion(*, model, system_prompt, data, api_key=None, reasoning_effort=None, max_output_tokens=None):
+    async def fake_stream_completion(*, model, system_prompt, data, api_key=None, reasoning_effort=None, max_output_tokens=None, azure=None):
         if "explaining to a principal" in system_prompt:
             yield "<explanation>Repo explanation</explanation>"
             return
