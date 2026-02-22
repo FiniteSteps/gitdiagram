@@ -8,6 +8,7 @@ import {
   varchar,
   primaryKey,
   boolean,
+  text,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -39,3 +40,20 @@ export const diagramCache = createTable(
     pk: primaryKey({ columns: [table.username, table.repo] }),
   }),
 );
+
+// ── Admin settings (singleton row, key = "default") ─────────────────
+export const adminSettings = createTable("admin_settings", {
+  key: varchar("key", { length: 64 }).primaryKey().default("default"),
+  // OpenAI / Azure OpenAI
+  openaiApiKey: text("openai_api_key"),
+  openaiModel: varchar("openai_model", { length: 128 }),
+  llmProvider: varchar("llm_provider", { length: 32 }).default("openai"), // "openai" | "azure_openai"
+  azureEndpoint: text("azure_endpoint"),
+  azureDeployment: varchar("azure_deployment", { length: 256 }),
+  azureApiVersion: varchar("azure_api_version", { length: 64 }),
+  // GitHub
+  githubPat: text("github_pat"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).$onUpdate(
+    () => new Date(),
+  ),
+});

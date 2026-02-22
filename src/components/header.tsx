@@ -4,17 +4,9 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { FaGithub } from "react-icons/fa";
 import { getStarCount } from "~/app/_actions/github";
-import { PrivateReposDialog } from "./private-repos-dialog";
-import { ApiKeyDialog } from "./api-key-dialog";
-import { ModelConfigDialog } from "./model-config-dialog";
 import { ThemeToggle } from "./theme-toggle";
-import type { ModelConfig } from "~/features/diagram/types";
 
 export function Header() {
-  const [isPrivateReposDialogOpen, setIsPrivateReposDialogOpen] =
-    useState(false);
-  const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
-  const [isModelConfigDialogOpen, setIsModelConfigDialogOpen] = useState(false);
   const [starCount, setStarCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -27,21 +19,6 @@ export function Header() {
       return `${(count / 1000).toFixed(1)}k`;
     }
     return count.toString();
-  };
-
-  const handlePrivateReposSubmit = (pat: string) => {
-    // Store the PAT in localStorage
-    localStorage.setItem("github_pat", pat);
-    setIsPrivateReposDialogOpen(false);
-  };
-
-  const handleApiKeySubmit = (apiKey: string) => {
-    localStorage.setItem("openai_key", apiKey);
-    setIsApiKeyDialogOpen(false);
-  };
-
-  const handleModelConfigSubmit = (_config: ModelConfig) => {
-    setIsModelConfigDialogOpen(false);
   };
 
   return (
@@ -58,34 +35,6 @@ export function Header() {
           </span>
         </Link>
         <nav className="flex items-center gap-3 sm:gap-6">
-          <button
-            type="button"
-            onClick={() => setIsModelConfigDialogOpen(true)}
-            className="text-sm font-medium text-black transition-transform hover:translate-y-[-2px] hover:text-purple-600 dark:text-neutral-200 dark:hover:text-[hsl(var(--neo-link-hover))]"
-          >
-            <span className="sm:hidden">Models</span>
-            <span className="hidden sm:inline">Manage Models</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsApiKeyDialogOpen(true)}
-            className="text-sm font-medium text-black transition-transform hover:translate-y-[-2px] hover:text-purple-600 dark:text-neutral-200 dark:hover:text-[hsl(var(--neo-link-hover))]"
-          >
-            <span className="flex items-center sm:hidden">
-              <span>API Key</span>
-            </span>
-            <span className="hidden items-center gap-1 sm:flex">
-              <span>API Key</span>
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsPrivateReposDialogOpen(true)}
-            className="text-sm font-medium text-black transition-transform hover:translate-y-[-2px] hover:text-purple-600 dark:text-neutral-200 dark:hover:text-[hsl(var(--neo-link-hover))]"
-          >
-            <span className="sm:hidden">Private Repos</span>
-            <span className="hidden sm:inline">Private Repos</span>
-          </button>
           <ThemeToggle />
           <Link
             href="https://github.com/ahmedkhaleel2004/gitdiagram"
@@ -99,22 +48,6 @@ export function Header() {
             {formatStarCount(starCount)}
           </span>
         </nav>
-
-        <PrivateReposDialog
-          isOpen={isPrivateReposDialogOpen}
-          onClose={() => setIsPrivateReposDialogOpen(false)}
-          onSubmit={handlePrivateReposSubmit}
-        />
-        <ApiKeyDialog
-          isOpen={isApiKeyDialogOpen}
-          onClose={() => setIsApiKeyDialogOpen(false)}
-          onSubmit={handleApiKeySubmit}
-        />
-        <ModelConfigDialog
-          isOpen={isModelConfigDialogOpen}
-          onClose={() => setIsModelConfigDialogOpen(false)}
-          onSubmit={handleModelConfigSubmit}
-        />
       </div>
     </header>
   );

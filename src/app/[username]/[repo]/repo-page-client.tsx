@@ -5,8 +5,6 @@ import MainCard from "~/components/main-card";
 import Loading from "~/components/loading";
 import MermaidChart from "~/components/mermaid-diagram";
 import { useDiagram } from "~/hooks/useDiagram";
-import { ApiKeyDialog } from "~/components/api-key-dialog";
-import { ApiKeyButton } from "~/components/api-key-button";
 import { useStarReminder } from "~/hooks/useStarReminder";
 
 type RepoPageClientProps = {
@@ -28,11 +26,7 @@ export default function RepoPageClient({ username, repo }: RepoPageClientProps) 
     loading,
     lastGenerated,
     cost,
-    showApiKeyDialog,
     handleCopy,
-    handleApiKeySubmit,
-    handleCloseApiKeyDialog,
-    handleOpenApiKeyDialog,
     handleExportImage,
     handleRegenerate,
     state,
@@ -78,12 +72,6 @@ export default function RepoPageClient({ username, repo }: RepoPageClientProps) 
                 {state.parserError}
               </pre>
             )}
-            {(error?.includes("API key") ||
-              state.error?.includes("API key")) && (
-              <div className="mt-8 flex flex-col items-center gap-2">
-                <ApiKeyButton onClick={handleOpenApiKeyDialog} />
-              </div>
-            )}
           </div>
         ) : (
           <div className="flex w-full justify-center px-4">
@@ -91,12 +79,6 @@ export default function RepoPageClient({ username, repo }: RepoPageClientProps) 
           </div>
         )}
       </div>
-
-      <ApiKeyDialog
-        isOpen={showApiKeyDialog}
-        onClose={handleCloseApiKeyDialog}
-        onSubmit={handleApiKeySubmit}
-      />
     </div>
   );
 }

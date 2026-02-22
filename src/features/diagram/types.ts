@@ -74,7 +74,4 @@ export interface ModelConfig {
 export interface StreamGenerationParams {
   username: string;
   repo: string;
-  apiKey?: string;
-  githubPat?: string;
-  modelConfig?: ModelConfig;
 }

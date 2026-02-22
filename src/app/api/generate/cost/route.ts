@@ -7,6 +7,7 @@ import { countInputTokens, estimateTokens, type AzureOpenAIOptions } from "~/ser
 import { SYSTEM_FIRST_PROMPT } from "~/server/generate/prompts";
 import { estimateTextTokenCostUsd } from "~/server/generate/pricing";
 import { generateRequestSchema, type ModelConfigPayload } from "~/server/generate/types";
+import { getResolvedAdminConfig } from "~/server/generate/admin-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,17 +72,15 @@ export async function POST(request: Request) {
       });
     }
 
-    const {
-      username,
-      repo,
-      api_key: rawApiKey,
-      github_pat: githubPat,
-      model_config: modelConfigPayload,
-    } = parsed.data;
-    const { apiKey: mcApiKey, azure, modelOverride } = resolveModelConfig(modelConfigPayload);
-    const apiKey = mcApiKey ?? rawApiKey;
+    const { username, repo } = parsed.data;
+
+    // Resolve settings from admin DB config (never from client)
+    const adminConfig = await getResolvedAdminConfig();
+    const apiKey = adminConfig.apiKey;
+    const azure = adminConfig.azure;
+    const githubPat = adminConfig.githubPat;
     const githubData = await getGithubData(username, repo, githubPat);
-    const model = modelOverride || getModel();
+    const model = adminConfig.model || getModel();
 
     const baseInputTokens = await estimateRepoInputTokens(
       model,

@@ -2,26 +2,8 @@ import { parseSSEStreamBuffer } from "~/features/diagram/sse";
 import type {
   DiagramCostResponse,
   DiagramStreamMessage,
-  ModelConfig,
   StreamGenerationParams,
 } from "~/features/diagram/types";
-
-function modelConfigToPayload(config?: ModelConfig) {
-  if (!config) return undefined;
-  return {
-    provider: config.provider,
-    model_name: config.modelName,
-    api_key: config.apiKey,
-    azure:
-      config.provider === "azure_openai" && config.azure
-        ? {
-            endpoint: config.azure.endpoint,
-            deployment: config.azure.deployment,
-            api_version: config.azure.apiVersion,
-          }
-        : undefined,
-  };
-}
 
 interface StreamHandlers {
   onMessage: (
@@ -46,9 +28,6 @@ const getGenerateBasePath = () => {
 export async function getGenerationCost(
   username: string,
   repo: string,
-  githubPat?: string,
-  apiKey?: string,
-  modelConfig?: ModelConfig,
 ): Promise<DiagramCostResponse> {
   try {
     const response = await fetch(`${getGenerateBasePath()}/cost`, {
@@ -56,13 +35,7 @@ export async function getGenerationCost(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        username,
-        repo,
-        api_key: apiKey,
-        github_pat: githubPat,
-        model_config: modelConfigToPayload(modelConfig),
-      }),
+      body: JSON.stringify({ username, repo }),
     });
 
     if (response.status === 429) {
@@ -93,9 +66,6 @@ export async function streamDiagramGeneration(
     body: JSON.stringify({
       username: params.username,
       repo: params.repo,
-      api_key: params.apiKey,
-      github_pat: params.githubPat,
-      model_config: modelConfigToPayload(params.modelConfig),
     }),
   });
 
